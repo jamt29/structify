@@ -1,0 +1,11 @@
+name: "minimal-ts"
+version: "0.0.1"
+author: "structify"
+language: "typescript"
+architecture: "clean"
+description: "Builtin minimal TypeScript template"
+tags: ["typescript", "minimal"]
+inputs: []
+files: []
+steps: []
+

@@ -1,0 +1,11 @@
+name: "minimal-go"
+version: "0.0.1"
+author: "structify"
+language: "go"
+architecture: "clean"
+description: "Builtin minimal Go template"
+tags: ["go", "minimal"]
+inputs: []
+files: []
+steps: []
+

@@ -1,0 +1,33 @@
+name: "simple-template"
+version: "0.0.1"
+author: "structify"
+language: "go"
+architecture: "clean"
+description: "Test template for engine integration tests"
+tags: ["test"]
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    default: "myapp"
+  - id: use_docker
+    prompt: "Use docker?"
+    type: bool
+    required: true
+    default: true
+files:
+  - include: "docker/**"
+    when: use_docker == true
+  - exclude: "docker/**"
+    when: use_docker == false
+steps:
+  - name: "Create marker"
+    run: "echo generated > marker.txt"
+  - name: "Skipped step"
+    run: "echo should_not_run > skipped_step.txt"
+    when: use_docker == false
+  - name: "Fail step"
+    run: "false"
+    when: project_name == "fail"
+

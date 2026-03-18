@@ -20,3 +20,15 @@
 - [x] 2.8 — Validator (`internal/dsl/validator.go`)
 - [x] 2.9 — Tests (`internal/dsl/`)
 
+## Fase 3 — Engine de Scaffolding
+
+- [x] 3.1 — Modelo de Template (`internal/template/model.go`)
+- [x] 3.2 — Store de Templates (`internal/template/store.go`)
+- [x] 3.3 — Loader de Templates (`internal/template/loader.go`)
+- [x] 3.4 — Resolver (`internal/engine/resolver.go`)
+- [x] 3.5 — Procesador de Archivos (`internal/engine/file_processor.go`)
+- [x] 3.6 — Rollback (`internal/engine/rollback.go`)
+- [x] 3.7 — Ejecutor de Steps (`internal/engine/executor.go`)
+- [x] 3.8 — Engine Principal (`internal/engine/engine.go`)
+- [x] 3.9 — Tests de Integración (`internal/engine/engine_test.go`, `internal/template/store_test.go`, `internal/engine/file_processor_test.go`)
+
