@@ -25,3 +25,7 @@
 - **Lección:** Los patrones de `//go:embed` no pueden contener `..`; para embebir `templates/**` el archivo con el embed debe vivir en (o por encima de) `templates/`. Solución: exponer un `embed.FS` desde el paquete raíz y consumirlo desde el loader.
 - **Aplicar en:** `builtin_templates.go`, `internal/template/loader.go`
 
+### L007 — Errores de printf/vet y cobertura en toolchain nuevo
+- **Contexto:** Con el toolchain actualizado, `go test` puede fallar por `fmt.Errorf(<string variable>)` (chequeo printf/vet) y `go test ./... -cover` puede fallar en paquetes “sin tests”.
+- **Lección:** Si el error es “non-constant format string”, usar `errors.New(msg)` o `fmt.Errorf("%s", msg)`; y para que `-cover` no falle en paquetes sin tests, agregar tests mínimos (smoke) o al menos un `*_test.go` que compile.
+- **Aplicar en:** `internal/template/*`, `internal/engine/rollback.go`, `builtin_templates_test.go`, `cmd/structify/main_test.go`

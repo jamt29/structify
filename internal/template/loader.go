@@ -49,7 +49,7 @@ func LoadFromPath(path string) (*Template, error) {
 			b.WriteString(ve.Message)
 			b.WriteString("\n")
 		}
-		return nil, fmt.Errorf(strings.TrimRight(b.String(), "\n"))
+		return nil, errors.New(strings.TrimRight(b.String(), "\n"))
 	}
 
 	return &Template{

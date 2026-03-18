@@ -178,7 +178,7 @@ func loadAndValidateTemplate(dir string, source string) (*Template, error) {
 			b.WriteString(ve.Message)
 			b.WriteString("\n")
 		}
-		return nil, fmt.Errorf(strings.TrimRight(b.String(), "\n"))
+		return nil, fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 	}
 	return &Template{Manifest: m, Path: dir, Source: source}, nil
 }

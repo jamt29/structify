@@ -106,6 +106,6 @@ func joinErrors(errs []error) error {
 		b.WriteString(err.Error())
 		b.WriteString("\n")
 	}
-	return fmt.Errorf(strings.TrimRight(b.String(), "\n"))
+	return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 }
 

@@ -32,3 +32,12 @@
 - [x] 3.8 — Engine Principal (`internal/engine/engine.go`)
 - [x] 3.9 — Tests de Integración (`internal/engine/engine_test.go`, `internal/template/store_test.go`, `internal/engine/file_processor_test.go`)
 
+## Fase 4 — Comando `structify new` end-to-end
+
+- [x] 4.1 — TUI: Selector de Template (`internal/tui/selector.go`)
+- [x] 4.2 — TUI: Formulario de Inputs (`internal/tui/inputs.go`)
+- [x] 4.3 — TUI: Progreso de Generación (`internal/tui/progress.go`)
+- [x] 4.4 — TUI: Resumen Final (`internal/tui/summary.go`)
+- [x] 4.5 — Modo Flags (no-interactivo) (`cmd/new.go`)
+- [x] 4.6 — Integración completa (`cmd/new.go`)
+

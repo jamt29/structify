@@ -4,7 +4,7 @@ BIN_NAME := structify
 .PHONY: build test lint install clean
 
 build:
-	go build -o $(BIN_DIR)/$(BIN_NAME) .
+	go build -o $(BIN_DIR)/$(BIN_NAME) ./cmd/structify
 
 test:
 	go test ./...

@@ -5,7 +5,26 @@ language: "go"
 architecture: "clean"
 description: "Builtin minimal Go template"
 tags: ["go", "minimal"]
-inputs: []
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    validate: "^[a-z][a-z0-9-]+$"
+
+  - id: orm
+    prompt: "ORM?"
+    type: enum
+    options: [gorm, none]
+    default: none
+
 files: []
-steps: []
+
+steps:
+  - name: "go mod tidy"
+    run: "go mod tidy"
+
+  - name: "go get gorm.io/gorm"
+    run: "go get gorm.io/gorm"
+    when: orm == "gorm"
 
