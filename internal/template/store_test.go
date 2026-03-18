@@ -62,6 +62,9 @@ func TestStore_AddGetRemoveCycle(t *testing.T) {
 	if got.Manifest.Name != "my-template" {
 		t.Fatalf("manifest name=%q, want %q", got.Manifest.Name, "my-template")
 	}
+	if got.Meta != nil {
+		t.Fatalf("expected no metadata for templates added without .structify-meta.yaml, got %+v", got.Meta)
+	}
 
 	linkPath := filepath.Join(TemplatesDir(), "my-template", "template", "link.txt")
 	if fi, err := os.Lstat(linkPath); err != nil {
@@ -174,6 +177,44 @@ func TestStore_AddInvalidManifestErrors(t *testing.T) {
 
 	if err := Add(srcRoot); err == nil {
 		t.Fatalf("expected Add() error for invalid manifest")
+	}
+}
+
+func TestStore_LoadTemplateMetadata(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	root := TemplatesDir()
+	dir := filepath.Join(root, "with-meta")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "scaffold.yaml"), []byte(minValidManifestYAML("with-meta")), 0o644); err != nil {
+		t.Fatalf("write scaffold.yaml: %v", err)
+	}
+	metaYAML := "" +
+		"source_url: \"github.com/user/repo\"\n" +
+		"source_ref: \"v1.2.3\"\n" +
+		"installed_at: \"2025-01-15T10:30:00Z\"\n"
+	if err := os.WriteFile(filepath.Join(dir, ".structify-meta.yaml"), []byte(metaYAML), 0o644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	tpl, err := loadAndValidateTemplate(dir, "local")
+	if err != nil {
+		t.Fatalf("loadAndValidateTemplate error: %v", err)
+	}
+	if tpl.Meta == nil {
+		t.Fatalf("expected metadata to be loaded")
+	}
+	if tpl.Meta.SourceURL != "github.com/user/repo" {
+		t.Fatalf("SourceURL=%q, want %q", tpl.Meta.SourceURL, "github.com/user/repo")
+	}
+	if tpl.Meta.SourceRef != "v1.2.3" {
+		t.Fatalf("SourceRef=%q, want %q", tpl.Meta.SourceRef, "v1.2.3")
+	}
+	if tpl.Meta.InstalledAt != "2025-01-15T10:30:00Z" {
+		t.Fatalf("InstalledAt=%q, want %q", tpl.Meta.InstalledAt, "2025-01-15T10:30:00Z")
 	}
 }
 

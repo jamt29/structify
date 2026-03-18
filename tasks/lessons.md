@@ -29,3 +29,13 @@
 - **Contexto:** Con el toolchain actualizado, `go test` puede fallar por `fmt.Errorf(<string variable>)` (chequeo printf/vet) y `go test ./... -cover` puede fallar en paquetes “sin tests”.
 - **Lección:** Si el error es “non-constant format string”, usar `errors.New(msg)` o `fmt.Errorf("%s", msg)`; y para que `-cover` no falle en paquetes sin tests, agregar tests mínimos (smoke) o al menos un `*_test.go` que compile.
 - **Aplicar en:** `internal/template/*`, `internal/engine/rollback.go`, `builtin_templates_test.go`, `cmd/structify/main_test.go`
+
+### L008 — Metadata de origen y operaciones GitHub deben ser explícitas
+- **Contexto:** Para poder actualizar templates instalados desde GitHub (`template update`), es necesario conocer de forma fiable el origen (URL y ref) usado en `template add`.
+- **Lección:** Guardar siempre metadata de origen en un archivo dedicado (`.structify-meta.yaml`) con campos claros (`source_url`, `source_ref`, `installed_at`) y usar ese archivo como única fuente de verdad para operaciones subsecuentes (`update`). Si falta metadata, fallar de forma explícita con un mensaje accionable.
+- **Aplicar en:** `internal/template/store.go`, `internal/template/github.go`, `cmd/template/add.go`, `cmd/template/update.go`
+
+### L009 — Checklists de CLI deben separar errores críticos de advertencias
+- **Contexto:** `template publish` mezcla requisitos “duros” (manifiesto válido, archivos en `template/`) con recomendaciones (README, versión razonable).
+- **Lección:** Distinguir entre ítems críticos (que afectan exit code) e ítems no críticos (solo advertencias), pero mostrar todos en un checklist unificado con marcas `[✓]/[✗]`. Esto mantiene la UX clara para humanos y scripts, sin romper pipelines por detalles no esenciales.
+- **Aplicar en:** `cmd/template/publish.go`, futuros comandos de validación/checklist.

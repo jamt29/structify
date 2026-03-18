@@ -2,11 +2,19 @@ package template
 
 import "github.com/jamt29/structify/internal/dsl"
 
+// TemplateMeta contains optional metadata about the origin of a template.
+type TemplateMeta struct {
+	SourceURL   string
+	SourceRef   string
+	InstalledAt string
+}
+
 // Template represents a scaffolding template loaded from some source.
 type Template struct {
 	Manifest *dsl.Manifest
 	Path     string
-	Source   string // "builtin" | "local" | "github"
+	Source   string       // "builtin" | "local" | "github"
+	Meta     *TemplateMeta
 }
 
 // ScaffoldRequest contains everything needed to scaffold a project.

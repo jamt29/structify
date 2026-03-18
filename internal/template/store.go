@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/jamt29/structify/internal/dsl"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -180,7 +181,76 @@ func loadAndValidateTemplate(dir string, source string) (*Template, error) {
 		}
 		return nil, fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 	}
-	return &Template{Manifest: m, Path: dir, Source: source}, nil
+
+	meta, _ := loadTemplateMeta(dir)
+
+	return &Template{
+		Manifest: m,
+		Path:     dir,
+		Source:   source,
+		Meta:     meta,
+	}, nil
+}
+
+func loadTemplateMeta(dir string) (*TemplateMeta, error) {
+	metaPath := filepath.Join(dir, ".structify-meta.yaml")
+	b, err := os.ReadFile(metaPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading template metadata %s: %w", metaPath, err)
+	}
+
+	var raw struct {
+		SourceURL   string `yaml:"source_url"`
+		SourceRef   string `yaml:"source_ref"`
+		InstalledAt string `yaml:"installed_at"`
+	}
+	if err := yaml.Unmarshal(b, &raw); err != nil {
+		return nil, fmt.Errorf("parsing template metadata %s: %w", metaPath, err)
+	}
+
+	if strings.TrimSpace(raw.SourceURL) == "" && strings.TrimSpace(raw.SourceRef) == "" && strings.TrimSpace(raw.InstalledAt) == "" {
+		return nil, nil
+	}
+
+	return &TemplateMeta{
+		SourceURL:   raw.SourceURL,
+		SourceRef:   raw.SourceRef,
+		InstalledAt: raw.InstalledAt,
+	}, nil
+}
+
+// WriteTemplateMeta writes .structify-meta.yaml inside dir with the given metadata.
+func WriteTemplateMeta(dir string, meta *TemplateMeta) error {
+	if meta == nil {
+		return nil
+	}
+	metaPath := filepath.Join(dir, ".structify-meta.yaml")
+	raw := struct {
+		SourceURL   string `yaml:"source_url"`
+		SourceRef   string `yaml:"source_ref"`
+		InstalledAt string `yaml:"installed_at"`
+	}{
+		SourceURL:   meta.SourceURL,
+		SourceRef:   meta.SourceRef,
+		InstalledAt: meta.InstalledAt,
+	}
+	b, err := yaml.Marshal(&raw)
+	if err != nil {
+		return fmt.Errorf("marshaling template metadata: %w", err)
+	}
+	if err := os.WriteFile(metaPath, b, 0o644); err != nil {
+		return fmt.Errorf("writing template metadata %s: %w", metaPath, err)
+	}
+	return nil
+}
+
+// CopyDirForTest exposes copyDir for internal use in tests and other packages that
+// need to reuse the same semantics. It is not part of the public API surface.
+func CopyDirForTest(src, dst string) error {
+	return copyDir(src, dst)
 }
 
 func copyDir(src, dst string) error {

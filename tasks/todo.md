@@ -41,3 +41,16 @@
 - [x] 4.5 — Modo Flags (no-interactivo) (`cmd/new.go`)
 - [x] 4.6 — Integración completa (`cmd/new.go`)
 
+## Fase 5 — Sistema de Templates Local (`structify template *`)
+
+- [x] 5.1 — `template list` (agrupación local/built-in, `--json`, tests)
+- [x] 5.2 — `template info` (detalle con lipgloss, inputs/steps, tests)
+- [x] 5.3 — `template validate` (directorio/archivo, resumen, `--json`, exit codes, tests)
+- [x] 5.4 — Metadata de templates (`TemplateMeta`, `.structify-meta.yaml`, store + tests)
+- [x] 5.5 — `template add` (GitHub + go-git, validación, metadata, `--force`, tests)
+- [x] 5.6 — `template remove` (solo locales, confirmación interactiva, `--yes`, tests)
+- [x] 5.7 — `template create` (wizard interactivo, `--output`, estructura base, tests de lógica)
+- [x] 5.8 — `template update` (origen GitHub vía metadata, actualización versión, tests)
+- [x] 5.9 — `template publish` (checklist interactivo, exit codes críticos, tests)
+- [x] 5.10 — Verificación global (`go build ./...`, `go test ./cmd/template/... -v`, `go test ./... -cover` con cobertura ≥ ~70% en paquetes clave)
+
