@@ -54,3 +54,13 @@
 - **Contexto:** Algunos templates requieren defaults que usan interpolación basada en otros inputs, por ejemplo `module_path` con `{{ project_name | kebab_case }}`.
 - **Lección:** Resolver interpolaciones anidadas dentro de valores string del contexto una vez que ya están definidas las variables base.
 - **Aplicar en:** `cmd/new.go` (función `resolveContextInterpolations`).
+
+### L013 — `.go` dentro de templates rompe `-cover`
+- **Contexto:** `go test ./... -cover` falló con `go: no such tool "covdata"` porque archivos con extensión `.go` dentro del árbol de templates fueron interpretados como código Go compilable.
+- **Lección:** Asegurar que los archivos “de plantilla” no tengan extensión `.go` (renombrar a `.go.tmpl`) para que el tooling no los trate como paquetes Go.
+- **Aplicar en:** directorios built-in bajo `templates/*/template/**` antes de release.
+
+### L014 — Construcción del binario: usar el package `main`
+- **Contexto:** `go build -o ./bin/structify ./` produjo un `ar archive` (no un ejecutable) porque el package raíz no era `main`.
+- **Lección:** Para producir el binario del CLI, compilar desde `./cmd/structify` (donde vive `package main`), no desde `./`.
+- **Aplicar en:** desarrollo local y preparación de checks/dry-runs del release.

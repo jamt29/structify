@@ -56,11 +56,11 @@ steps:
 
   - name: "install gorm deps"
     run: "go get gorm.io/gorm"
-    when: transport != "grpc" && orm == "gorm"
+    when: orm == "gorm"
 
   - name: "install sqlx deps"
     run: "go get github.com/jmoiron/sqlx"
-    when: transport != "grpc" && orm == "sqlx"
+    when: orm == "sqlx"
 
   - name: "go mod tidy"
     run: "go mod tidy"

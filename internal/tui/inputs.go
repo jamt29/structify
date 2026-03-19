@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,28 +20,34 @@ func RunInputs(inputs []dsl.Input) (dsl.Context, error) {
 // RunInputsWithInitial is like RunInputs but seeds the context with pre-filled values.
 // This is used by the `structify new` command to support a mixed mode (flags + TUI).
 func RunInputsWithInitial(inputs []dsl.Input, initial dsl.Context) (dsl.Context, error) {
-	ctx := dsl.Context{}
+	answers := map[string]string{}
 	for k, v := range initial {
-		ctx[k] = v
+		answers[k] = fmt.Sprint(v)
 	}
 
-	for _, in := range inputs {
+	for idx, in := range inputs {
 		id := strings.TrimSpace(in.ID)
 		if id == "" {
 			continue
 		}
 
-		ok, err := evalWhen(in.When, ctx)
+		// Build context for the already processed inputs.
+		ctxPrefix, err := BuildContext(inputs[:idx], answers)
+		if err != nil {
+			return nil, fmt.Errorf("building context for %q: %w", id, err)
+		}
+
+		ok, err := ShouldAskInput(in, ctxPrefix)
 		if err != nil {
 			return nil, fmt.Errorf("evaluating when for input %q: %w", id, err)
 		}
 		if !ok {
-			ctx[id] = defaultOrZero(in)
+			// When false => no prompt; BuildContext(inputs, answers) will apply defaults.
 			continue
 		}
 
-		if v, exists := ctx[id]; exists {
-			if err := validateProvided(in, v); err != nil {
+		if ans, exists := answers[id]; exists {
+			if err := ValidateInputValue(in, ans); err != nil {
 				return nil, fmt.Errorf("invalid value for %q: %w", id, err)
 			}
 			continue
@@ -77,107 +82,13 @@ func RunInputsWithInitial(inputs []dsl.Input, initial dsl.Context) (dsl.Context,
 			return nil, fmt.Errorf("unsupported input type %q for %q", in.Type, id)
 		}
 
-		if err := validateProvided(in, val); err != nil {
+		if err := ValidateInputValue(in, fmt.Sprint(val)); err != nil {
 			return nil, fmt.Errorf("invalid value for %q: %w", id, err)
 		}
-		ctx[id] = val
+		answers[id] = fmt.Sprint(val)
 	}
 
-	return ctx, nil
-}
-
-func evalWhen(expr string, ctx dsl.Context) (bool, error) {
-	when := strings.TrimSpace(expr)
-	if when == "" {
-		return true, nil
-	}
-	ast, err := dsl.NewParser(when).Parse()
-	if err != nil {
-		return false, err
-	}
-	return dsl.Evaluate(ast, ctx)
-}
-
-func defaultOrZero(in dsl.Input) any {
-	switch strings.ToLower(strings.TrimSpace(in.Type)) {
-	case "string", "enum":
-		if in.Default == nil {
-			return ""
-		}
-		if s, ok := in.Default.(string); ok {
-			return s
-		}
-		return fmt.Sprintf("%v", in.Default)
-	case "bool":
-		if in.Default == nil {
-			return false
-		}
-		if b, ok := in.Default.(bool); ok {
-			return b
-		}
-		// best-effort: allow "true"/"false" or y/n
-		if s, ok := in.Default.(string); ok {
-			v, _ := parseBoolString(s)
-			return v
-		}
-		return false
-	default:
-		return nil
-	}
-}
-
-func validateProvided(in dsl.Input, v any) error {
-	id := strings.TrimSpace(in.ID)
-	switch strings.ToLower(strings.TrimSpace(in.Type)) {
-	case "string":
-		s, ok := v.(string)
-		if !ok {
-			return fmt.Errorf("expected string, got %T", v)
-		}
-		if strings.TrimSpace(s) == "" {
-			if in.Default != nil {
-				// allow empty when default exists; caller may replace it
-			} else if in.Required {
-				return fmt.Errorf("value is required")
-			}
-		}
-		if strings.TrimSpace(in.Validate) != "" && strings.TrimSpace(s) != "" {
-			re, err := regexp.Compile(in.Validate)
-			if err != nil {
-				return fmt.Errorf("invalid validate regex for %q: %w", id, err)
-			}
-			if !re.MatchString(s) {
-				return fmt.Errorf("does not match %s", in.Validate)
-			}
-		}
-		return nil
-	case "enum":
-		s, ok := v.(string)
-		if !ok {
-			return fmt.Errorf("expected string, got %T", v)
-		}
-		if strings.TrimSpace(s) == "" {
-			if in.Default != nil {
-				// allow empty when default exists; caller may replace it
-			} else if in.Required {
-				return fmt.Errorf("value is required")
-			}
-			return nil
-		}
-		for _, opt := range in.Options {
-			if s == opt {
-				return nil
-			}
-		}
-		return fmt.Errorf("must be one of: %s", strings.Join(in.Options, ", "))
-	case "bool":
-		if _, ok := v.(bool); !ok {
-			return fmt.Errorf("expected bool, got %T", v)
-		}
-		return nil
-	default:
-		return fmt.Errorf("unsupported input type %q", in.Type)
-	}
+	return BuildContext(inputs, answers)
 }
 
 type stringPromptModel struct {
