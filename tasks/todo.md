@@ -54,3 +54,12 @@
 - [x] 5.9 — `template publish` (checklist interactivo, exit codes críticos, tests)
 - [x] 5.10 — Verificación global (`go build ./...`, `go test ./cmd/template/... -v`, `go test ./... -cover` con cobertura ≥ ~70% en paquetes clave)
 
+## Fase 6 — Sharing vía GitHub
+
+- [x] 6.1 — Parser de URLs GitHub (`internal/template/github.go`)
+- [x] 6.2 — Cliente GitHub (`internal/template/github.go`)
+- [x] 6.3 — Comando `structify template add` (`cmd/template/add.go`)
+- [x] 6.4 — Comando `structify template update` (`cmd/template/update.go`)
+- [x] 6.5 — Formato estándar de repos de templates (`docs/template-format.md`)
+- [x] 6.6 — Tests, verificación global y resultado de fase (`tasks/FASE6-RESULTADO.md`)
+

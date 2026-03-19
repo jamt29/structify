@@ -4,30 +4,37 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
-	git "github.com/go-git/go-git/v5"
 	"github.com/jamt29/structify/internal/dsl"
 	tmpl "github.com/jamt29/structify/internal/template"
 	"github.com/spf13/cobra"
 )
 
 var (
-	addForce    bool
-	gitCloneFunc = git.PlainClone
+	addForce        bool
+	addName         string
+	newGitHubClient = tmpl.NewGitHubClient
 )
+
+type githubClient interface {
+	Clone(ref *tmpl.GitHubRef, destDir string) error
+	ValidateTemplateRepo(clonedPath string) (*dsl.Manifest, error)
+}
 
 var addCmd = &cobra.Command{
 	Use:   "add <source>",
-	Short: "Add a template from a local path or Git repository",
+	Short: "Add a template from a local path or GitHub repository",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source := args[0]
 
-		// Try to parse as GitHub source first.
-		gitSource, err := tmpl.ParseGitSource(source)
+		// Try to parse as GitHub URL first.
+		ref, err := tmpl.ParseGitHubURL(source)
 		if err == nil {
-			return runAddFromGit(cmd, gitSource)
+			client := newGitHubClient()
+			return runAddFromGit(cmd, client, ref)
 		}
 
 		// Fallback: treat as local path and delegate to store.Add.
@@ -41,22 +48,21 @@ var addCmd = &cobra.Command{
 
 func init() {
 	addCmd.Flags().BoolVar(&addForce, "force", false, "overwrite existing template with the same name")
+	addCmd.Flags().StringVar(&addName, "name", "", "local name to use for the installed template (defaults to repository name)")
 	Cmd.AddCommand(addCmd)
 }
 
-func runAddFromGit(cmd *cobra.Command, src *tmpl.GitSource) error {
+func runAddFromGit(cmd *cobra.Command, client githubClient, ref *tmpl.GitHubRef) error {
 	tmpDir, err := os.MkdirTemp("", "structify-template-add-*")
 	if err != nil {
 		return fmt.Errorf("creating temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cloneOpts := &git.CloneOptions{
-		URL:      "https://" + src.SourceURL,
-		Progress: cmd.ErrOrStderr(),
-	}
-	if _, err := gitCloneFunc(tmpDir, false, cloneOpts); err != nil {
-		return fmt.Errorf("cloning %s: %w", src.SourceURL, err)
+	fmt.Fprintf(cmd.OutOrStdout(), "  → Fetching template from github.com/%s/%s...\n", ref.Owner, ref.Repo)
+
+	if err := client.Clone(ref, tmpDir); err != nil {
+		return err
 	}
 
 	manifestPath := filepath.Join(tmpDir, "scaffold.yaml")
@@ -73,18 +79,23 @@ func runAddFromGit(cmd *cobra.Command, src *tmpl.GitSource) error {
 		return fmt.Errorf("cloned template has empty name in manifest")
 	}
 
+	localName := addName
+	if strings.TrimSpace(localName) == "" {
+		localName = ref.Repo
+	}
+
 	templatesRoot := tmpl.TemplatesDir()
 	if err := os.MkdirAll(templatesRoot, 0o755); err != nil {
 		return fmt.Errorf("creating templates dir %s: %w", templatesRoot, err)
 	}
 
-	destDir := filepath.Join(templatesRoot, name)
+	destDir := filepath.Join(templatesRoot, localName)
 	if _, err := os.Stat(destDir); err == nil {
 		if !addForce {
-			return fmt.Errorf("template %q already exists (use --force to overwrite)", name)
+			return fmt.Errorf("template %q already exists (use --force to overwrite)", localName)
 		}
 		if err := os.RemoveAll(destDir); err != nil {
-			return fmt.Errorf("removing existing template %q: %w", name, err)
+			return fmt.Errorf("removing existing template %q: %w", localName, err)
 		}
 	} else if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("stat destination %s: %w", destDir, err)
@@ -99,15 +110,17 @@ func runAddFromGit(cmd *cobra.Command, src *tmpl.GitSource) error {
 	}
 
 	meta := &tmpl.TemplateMeta{
-		SourceURL:   src.SourceURL,
-		SourceRef:   src.Ref,
+		SourceURL:   fmt.Sprintf("github.com/%s/%s", ref.Owner, ref.Repo),
+		SourceRef:   ref.Ref,
 		InstalledAt: time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := tmpl.WriteTemplateMeta(destDir, meta); err != nil {
 		return fmt.Errorf("writing template metadata: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "✓ Template %q added successfully\n", name)
+	fmt.Fprintf(cmd.OutOrStdout(), "  ✓ Found: %s (%s / %s)\n", m.Name, m.Language, m.Architecture)
+	fmt.Fprintf(cmd.OutOrStdout(), "  ✓ Template '%s' installed successfully\n", localName)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Run: structify new --template %s\n", localName)
 	return nil
 }
 

@@ -39,3 +39,8 @@
 - **Contexto:** `template publish` mezcla requisitos “duros” (manifiesto válido, archivos en `template/`) con recomendaciones (README, versión razonable).
 - **Lección:** Distinguir entre ítems críticos (que afectan exit code) e ítems no críticos (solo advertencias), pero mostrar todos en un checklist unificado con marcas `[✓]/[✗]`. Esto mantiene la UX clara para humanos y scripts, sin romper pipelines por detalles no esenciales.
 - **Aplicar en:** `cmd/template/publish.go`, futuros comandos de validación/checklist.
+
+### L010 — Mockear clientes externos en tests de CLI
+- **Contexto:** La integración con GitHub introduce dependencias de red (`go-git`, API HTTP) en los comandos `template add/update`, que no deben ejecutarse en tests unitarios.
+- **Lección:** Definir interfaces pequeñas (por ejemplo `githubClient` y factorías como `newGitHubClientFn`) para inyectar implementaciones fake en tests. Así se prueban flujos completos de CLI sin red real, simulando errores y estados de metadata de forma determinista.
+- **Aplicar en:** `internal/template/github.go`, `cmd/template/add.go`, `cmd/template/update.go`, `cmd/template/add_test.go`, `cmd/template/update_test.go`.

@@ -5,9 +5,24 @@ import (
 	"path/filepath"
 	"testing"
 
-	git "github.com/go-git/go-git/v5"
+	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/template"
 )
+
+type fakeUpdateGitHubClient struct{}
+
+func (f *fakeUpdateGitHubClient) Clone(ref *template.GitHubRef, destDir string) error {
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+	content := []byte(templateMinValidManifestYAML("from-git-update"))
+	return os.WriteFile(filepath.Join(destDir, "scaffold.yaml"), content, 0o644)
+}
+
+func (f *fakeUpdateGitHubClient) ValidateTemplateRepo(clonedPath string) (*dsl.Manifest, error) {
+	// Minimal validation for tests; assume manifest is valid.
+	return nil, nil
+}
 
 func TestUpdate_TemplateWithoutMetadataErrors(t *testing.T) {
 	home := t.TempDir()
@@ -25,8 +40,8 @@ func TestUpdate_TemplateWithoutMetadataErrors(t *testing.T) {
 	cmd := *updateCmd
 	cmd.SetOut(os.Stdout)
 	err := cmd.RunE(&cmd, []string{"no-meta"})
-	if err == nil {
-		t.Fatalf("expected error for template without metadata")
+	if err != nil {
+		t.Fatalf("did not expect error for template without metadata, got: %v", err)
 	}
 }
 
@@ -50,19 +65,11 @@ func TestUpdate_ReclonesFromGitSource(t *testing.T) {
 		t.Fatalf("WriteTemplateMeta: %v", err)
 	}
 
-	origClone := gitCloneFunc
-	defer func() { gitCloneFunc = origClone }()
-
-	gitCloneFunc = func(path string, bare bool, o *git.CloneOptions) (*git.Repository, error) {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			return nil, err
-		}
-		content := []byte(templateMinValidManifestYAML("from-git-update"))
-		if err := os.WriteFile(filepath.Join(path, "scaffold.yaml"), content, 0o644); err != nil {
-			return nil, err
-		}
-		return &git.Repository{}, nil
+	origNewClient := newGitHubClientFn
+	newGitHubClientFn = func() githubClient {
+		return &fakeUpdateGitHubClient{}
 	}
+	defer func() { newGitHubClientFn = origNewClient }()
 
 	cmd := *updateCmd
 	cmd.SetOut(os.Stdout)

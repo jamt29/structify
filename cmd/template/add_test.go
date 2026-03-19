@@ -2,45 +2,51 @@ package template
 
 import (
 	"bytes"
-	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 
-	git "github.com/go-git/go-git/v5"
+	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/template"
 )
 
-func TestRunAddFromGit_Success(t *testing.T) {
-	// Stub git clone to just create a fake repo with scaffold.yaml.
-	origClone := gitCloneFunc
-	defer func() { gitCloneFunc = origClone }()
+type fakeGitHubClient struct {
+	cloneErr error
+}
 
-	gitCloneFunc = func(path string, bare bool, o *git.CloneOptions) (*git.Repository, error) {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			return nil, err
-		}
-		content := []byte(templateMinValidManifestYAML("from-git"))
-		if err := os.WriteFile(filepath.Join(path, "scaffold.yaml"), content, 0o644); err != nil {
-			return nil, err
-		}
-		return &git.Repository{}, nil
+func (f *fakeGitHubClient) Clone(ref *template.GitHubRef, destDir string) error {
+	if f.cloneErr != nil {
+		return f.cloneErr
 	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return err
+	}
+	content := []byte(templateMinValidManifestYAML("from-git"))
+	return os.WriteFile(filepath.Join(destDir, "scaffold.yaml"), content, 0o644)
+}
 
+func (f *fakeGitHubClient) ValidateTemplateRepo(clonedPath string) (*dsl.Manifest, error) {
+	// not used in add tests; validation is done directly via dsl in runAddFromGit
+	return nil, nil
+}
+
+func TestRunAddFromGit_Success(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
-
-	src := &template.GitSource{
-		SourceURL: "github.com/user/repo",
-		Ref:       "v1.0.0",
-	}
 
 	buf := &bytes.Buffer{}
 	cmd := addCmd
 	cmd.SetOut(buf)
 	addForce = false
 
-	if err := runAddFromGit(cmd, src); err != nil {
+	client := &fakeGitHubClient{}
+	ref := &template.GitHubRef{
+		Owner: "user",
+		Repo:  "from-git",
+		Ref:   "v1.0.0",
+	}
+	if err := runAddFromGit(cmd, client, ref); err != nil {
 		t.Fatalf("runAddFromGit error: %v", err)
 	}
 
@@ -51,20 +57,6 @@ func TestRunAddFromGit_Success(t *testing.T) {
 }
 
 func TestRunAddFromGit_DuplicateWithoutForce_Fails(t *testing.T) {
-	origClone := gitCloneFunc
-	defer func() { gitCloneFunc = origClone }()
-
-	gitCloneFunc = func(path string, bare bool, o *git.CloneOptions) (*git.Repository, error) {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			return nil, err
-		}
-		content := []byte(templateMinValidManifestYAML("dup-git"))
-		if err := os.WriteFile(filepath.Join(path, "scaffold.yaml"), content, 0o644); err != nil {
-			return nil, err
-		}
-		return &git.Repository{}, nil
-	}
-
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 
@@ -74,36 +66,24 @@ func TestRunAddFromGit_DuplicateWithoutForce_Fails(t *testing.T) {
 		t.Fatalf("mkdir dest: %v", err)
 	}
 
-	src := &template.GitSource{
-		SourceURL: "github.com/user/repo",
-	}
-
 	buf := &bytes.Buffer{}
 	cmd := addCmd
 	cmd.SetOut(buf)
 	addForce = false
 
-	err := runAddFromGit(cmd, src)
+	client := &fakeGitHubClient{}
+	ref := &template.GitHubRef{
+		Owner: "user",
+		Repo:  "dup-git",
+	}
+
+	err := runAddFromGit(cmd, client, ref)
 	if err == nil {
 		t.Fatalf("expected error for duplicate template without --force")
 	}
 }
 
 func TestRunAddFromGit_WithForce_Overwrites(t *testing.T) {
-	origClone := gitCloneFunc
-	defer func() { gitCloneFunc = origClone }()
-
-	gitCloneFunc = func(path string, bare bool, o *git.CloneOptions) (*git.Repository, error) {
-		if err := os.MkdirAll(path, 0o755); err != nil {
-			return nil, err
-		}
-		content := []byte(templateMinValidManifestYAML("force-git"))
-		if err := os.WriteFile(filepath.Join(path, "scaffold.yaml"), content, 0o644); err != nil {
-			return nil, err
-		}
-		return &git.Repository{}, nil
-	}
-
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 
@@ -115,17 +95,19 @@ func TestRunAddFromGit_WithForce_Overwrites(t *testing.T) {
 		t.Fatalf("write old.txt: %v", err)
 	}
 
-	src := &template.GitSource{
-		SourceURL: "github.com/user/repo",
-		Ref:       "main",
-	}
-
 	buf := &bytes.Buffer{}
 	cmd := addCmd
 	cmd.SetOut(buf)
 	addForce = true
 
-	if err := runAddFromGit(cmd, src); err != nil {
+	client := &fakeGitHubClient{}
+	ref := &template.GitHubRef{
+		Owner: "user",
+		Repo:  "force-git",
+		Ref:   "main",
+	}
+
+	if err := runAddFromGit(cmd, client, ref); err != nil {
 		t.Fatalf("runAddFromGit error: %v", err)
 	}
 
@@ -135,43 +117,23 @@ func TestRunAddFromGit_WithForce_Overwrites(t *testing.T) {
 }
 
 func TestRunAddFromGit_CloneError_Wrapped(t *testing.T) {
-	origClone := gitCloneFunc
-	defer func() { gitCloneFunc = origClone }()
-
-	gitCloneFunc = func(path string, bare bool, o *git.CloneOptions) (*git.Repository, error) {
-		return nil, errors.New("network error")
-	}
-
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
-
-	src := &template.GitSource{
-		SourceURL: "github.com/user/repo",
-	}
 
 	buf := &bytes.Buffer{}
 	cmd := addCmd
 	cmd.SetOut(buf)
 	addForce = false
 
-	err := runAddFromGit(cmd, src)
+	client := &fakeGitHubClient{cloneErr: fmt.Errorf("network error")}
+	ref := &template.GitHubRef{
+		Owner: "user",
+		Repo:  "repo",
+	}
+
+	err := runAddFromGit(cmd, client, ref)
 	if err == nil {
 		t.Fatalf("expected error from clone failure")
 	}
-}
-
-// helper to build a minimal manifest used in tests.
-func templateMinValidManifestYAML(name string) string {
-	return "" +
-		"name: \"" + name + "\"\n" +
-		"version: \"0.0.1\"\n" +
-		"author: \"test\"\n" +
-		"language: \"go\"\n" +
-		"architecture: \"clean\"\n" +
-		"description: \"test\"\n" +
-		"tags: [\"test\"]\n" +
-		"inputs: []\n" +
-		"files: []\n" +
-		"steps: []\n"
 }
 

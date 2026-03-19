@@ -7,94 +7,85 @@ import (
 	"strings"
 	"time"
 
-	git "github.com/go-git/go-git/v5"
-	"github.com/jamt29/structify/internal/dsl"
 	tmpl "github.com/jamt29/structify/internal/template"
 	"github.com/spf13/cobra"
 )
 
+var (
+	updateDryRun      bool
+	newGitHubClientFn = func() githubClient { return tmpl.NewGitHubClient() }
+)
+
 var updateCmd = &cobra.Command{
-	Use:   "update <name>",
-	Short: "Update a template from its original source",
-	Args:  cobra.ExactArgs(1),
+	Use:   "update [name]",
+	Short: "Update one or all templates installed from GitHub",
+	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		name := strings.TrimSpace(args[0])
-		if name == "" {
-			return fmt.Errorf("template name is required")
+		client := newGitHubClientFn()
+
+		var templates []*tmpl.Template
+		if len(args) == 0 {
+			all, err := tmpl.List()
+			if err != nil {
+				return fmt.Errorf("listing templates: %w", err)
+			}
+			templates = all
+		} else {
+			name := strings.TrimSpace(args[0])
+			if name == "" {
+				return fmt.Errorf("template name is required")
+			}
+			t, err := tmpl.Get(name)
+			if err != nil {
+				return err
+			}
+			templates = []*tmpl.Template{t}
 		}
 
-		t, err := tmpl.Get(name)
-		if err != nil {
-			return err
-		}
-		if t.Meta == nil || strings.TrimSpace(t.Meta.SourceURL) == "" {
-			return fmt.Errorf("Template %q was not installed from GitHub", name)
-		}
+		var updated, skipped, failed int
 
-		oldVersion := ""
-		if t.Manifest != nil {
-			oldVersion = t.Manifest.Version
-		}
-
-		tmpDir, err := os.MkdirTemp("", "structify-template-update-*")
-		if err != nil {
-			return fmt.Errorf("creating temp dir: %w", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		cloneOpts := &git.CloneOptions{
-			URL: "https://" + t.Meta.SourceURL,
-		}
-		if t.Meta.SourceRef != "" {
-			cloneOpts.ReferenceName = ""
-		}
-		if _, err := gitCloneFunc(tmpDir, false, cloneOpts); err != nil {
-			return fmt.Errorf("cloning %s: %w", t.Meta.SourceURL, err)
-		}
-
-		manifestPath := filepath.Join(tmpDir, "scaffold.yaml")
-		m, err := dsl.LoadManifest(manifestPath)
-		if err != nil {
-			return fmt.Errorf("loading scaffold.yaml from cloned repo: %w", err)
-		}
-		if verrs := dsl.ValidateManifest(m); len(verrs) > 0 {
-			return fmt.Errorf("cloned template is invalid")
-		}
-
-		destDir := t.Path
-		entries, err := os.ReadDir(destDir)
-		if err != nil {
-			return fmt.Errorf("reading destination dir %s: %w", destDir, err)
-		}
-		for _, e := range entries {
-			name := e.Name()
-			if name == "." || name == ".." {
+		for _, t := range templates {
+			name := filepath.Base(t.Path)
+			if t.Meta == nil || strings.TrimSpace(t.Meta.SourceURL) == "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "  → '%s' skipped — not installed from GitHub\n", name)
+				skipped++
 				continue
 			}
-			if err := os.RemoveAll(filepath.Join(destDir, name)); err != nil {
-				return fmt.Errorf("clearing destination %s: %w", destDir, err)
+
+			ref, err := tmpl.ParseGitHubURL(t.Meta.SourceURL)
+			if err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  → '%s' skipped — invalid source URL %q: %v\n", name, t.Meta.SourceURL, err)
+				skipped++
+				continue
 			}
+			ref.Ref = t.Meta.SourceRef
+
+			displaySource := t.Meta.SourceURL
+			if strings.TrimSpace(t.Meta.SourceRef) != "" {
+				displaySource = fmt.Sprintf("%s@%s", t.Meta.SourceURL, t.Meta.SourceRef)
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "  → Updating '%s' from %s...\n", name, displaySource)
+
+			if updateDryRun {
+				updated++
+				continue
+			}
+
+			if err := updateSingleTemplate(cmd, client, t, ref); err != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  ✗ '%s' update failed: %v\n", name, err)
+				failed++
+				continue
+			}
+
+			fmt.Fprintf(cmd.OutOrStdout(), "  ✓ '%s' updated successfully\n", name)
+			updated++
 		}
 
-		if err := tmpl.CopyDirForTest(tmpDir, destDir); err != nil {
-			return fmt.Errorf("copying updated template to store: %w", err)
-		}
+		fmt.Fprintf(cmd.OutOrStdout(), "%d updated, %d skipped.\n", updated, skipped)
 
-		meta := &tmpl.TemplateMeta{
-			SourceURL:   t.Meta.SourceURL,
-			SourceRef:   t.Meta.SourceRef,
-			InstalledAt: time.Now().UTC().Format(time.RFC3339),
-		}
-		if err := tmpl.WriteTemplateMeta(destDir, meta); err != nil {
-			return fmt.Errorf("writing template metadata: %w", err)
-		}
-
-		out := cmd.OutOrStdout()
-		newVersion := m.Version
-		if oldVersion != "" && newVersion != "" && oldVersion != newVersion {
-			fmt.Fprintf(out, "Updated %q from %s to %s\n", name, oldVersion, newVersion)
-		} else {
-			fmt.Fprintf(out, "Template %q is already up to date\n", name)
+		if failed > 0 {
+			return fmt.Errorf("%d template updates failed", failed)
 		}
 
 		return nil
@@ -102,6 +93,53 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
+	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "show what would be updated without changing templates")
 	Cmd.AddCommand(updateCmd)
 }
+
+func updateSingleTemplate(cmd *cobra.Command, client githubClient, t *tmpl.Template, ref *tmpl.GitHubRef) error {
+	tmpDir, err := os.MkdirTemp("", "structify-template-update-*")
+	if err != nil {
+		return fmt.Errorf("creating temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	if err := client.Clone(ref, tmpDir); err != nil {
+		return err
+	}
+
+	if _, err := client.ValidateTemplateRepo(tmpDir); err != nil {
+		return err
+	}
+
+	destDir := t.Path
+	backupDir := destDir + ".bak"
+
+	if err := os.RemoveAll(backupDir); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing old backup dir %s: %w", backupDir, err)
+	}
+
+	if err := os.Rename(destDir, backupDir); err != nil {
+		return fmt.Errorf("creating backup dir %s: %w", backupDir, err)
+	}
+
+	if err := os.Rename(tmpDir, destDir); err != nil {
+		_ = os.Rename(backupDir, destDir)
+		return fmt.Errorf("replacing template dir %s: %w", destDir, err)
+	}
+
+	meta := &tmpl.TemplateMeta{
+		SourceURL:   t.Meta.SourceURL,
+		SourceRef:   t.Meta.SourceRef,
+		InstalledAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := tmpl.WriteTemplateMeta(destDir, meta); err != nil {
+		return fmt.Errorf("writing template metadata: %w", err)
+	}
+
+	_ = os.RemoveAll(backupDir)
+
+	return nil
+}
+
 
