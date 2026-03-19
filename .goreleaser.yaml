@@ -1,0 +1,57 @@
+project_name: structify
+
+builds:
+  - id: structify
+    main: ./cmd/structify/main.go
+    binary: structify
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w
+
+archives:
+  - id: default
+    builds:
+      - structify
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  algorithm: sha256
+  name_template: '{{ .ProjectName }}_checksums.txt'
+
+changelog:
+  use: git
+  groups:
+    - title: Features
+      regexp: '^feat'
+      order: 0
+    - title: Fixes
+      regexp: '^fix'
+      order: 10
+    - title: Docs
+      regexp: '^docs'
+      order: 20
+
+brews:
+  - repository:
+      owner: jamt29
+      name: homebrew-structify
+    homepage: "https://github.com/jamt29/structify"
+    description: "Multilenguaje project scaffolding CLI"
+

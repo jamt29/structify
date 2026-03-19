@@ -1,0 +1,17 @@
+{
+  "name": "{{ project_name | kebab_case }}",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {}
+}
+

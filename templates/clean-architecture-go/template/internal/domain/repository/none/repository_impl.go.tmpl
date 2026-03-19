@@ -1,0 +1,27 @@
+package none
+
+import (
+	repo "{{ module_path }}/internal/domain/repository"
+)
+
+// ExampleRepository es un stub sin ORM.
+// Scaffold steps no instalan dependencias extra cuando `orm == "none"`.
+type ExampleRepository struct{}
+
+func NewRepository() *ExampleRepository {
+	return &ExampleRepository{}
+}
+
+func (r *ExampleRepository) GetByID(id string) (string, error) {
+	_ = id
+	return "", nil
+}
+
+func (r *ExampleRepository) Save(id string, value string) error {
+	_ = id
+	_ = value
+	return nil
+}
+
+var _ repo.{{ project_name | pascal_case }}Repository = (*ExampleRepository)(nil)
+

@@ -1,0 +1,35 @@
+name: "vertical-slice-go"
+version: "0.0.1"
+author: "structify"
+language: "go"
+architecture: "vertical-slice"
+description: "Vertical Slice en Go con una feature de health y tests opcionales"
+tags: ["go", "vertical-slice", "api"]
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    validate: "^[a-z][a-z0-9-]+$"
+
+  - id: module_path
+    prompt: "Module path?"
+    type: string
+    default: "github.com/user/{{ project_name | kebab_case }}"
+
+  - id: include_tests
+    prompt: "Include tests?"
+    type: bool
+    default: true
+
+files:
+  - exclude: "features/health/*_test.go.tmpl"
+    when: include_tests == false
+
+steps:
+  - name: "go mod init"
+    run: "go mod init {{ module_path }}"
+
+  - name: "go mod tidy"
+    run: "go mod tidy"
+

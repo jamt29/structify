@@ -1,0 +1,7 @@
+bin/
+*.exe
+*.test
+*.out
+go.sum
+.DS_Store
+

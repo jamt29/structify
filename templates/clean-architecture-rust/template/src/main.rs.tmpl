@@ -1,0 +1,25 @@
+mod application;
+mod domain;
+mod infrastructure;
+
+fn main() {
+	let transport = "{{ transport }}";
+	println!(
+		"{{ project_name | pascal_case }} (transport: {})",
+		transport
+	);
+
+	match transport {
+		"none" => {
+			println!("No transport selected; domain/application/infrastructure stubs only.");
+		}
+		"axum" => {
+			println!("axum transport selected (stub).");
+		}
+		"actix" => {
+			println!("actix transport selected (stub).");
+		}
+		_ => unreachable!(),
+	}
+}
+

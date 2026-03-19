@@ -1,0 +1,31 @@
+import { registerHealthRoutes } from "./features/health/health.routes";
+
+const runtime = "{{ runtime }}";
+
+if (runtime === "express") {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const express = require("express");
+  const app = express();
+
+  registerHealthRoutes(app);
+
+  const port = Number(process.env.PORT ?? "3000");
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`HTTP listening on http://localhost:${port}/health`);
+  });
+} else {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fastify = require("fastify");
+  const app = fastify({ logger: true });
+
+  registerHealthRoutes(app);
+
+  const port = Number(process.env.PORT ?? "3000");
+  app.listen({ port, host: "0.0.0.0" }).catch((err: any) => {
+    // eslint-disable-next-line no-console
+    console.error(err);
+    process.exit(1);
+  });
+}
+

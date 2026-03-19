@@ -1,0 +1,46 @@
+name: "clean-architecture-ts"
+version: "0.0.1"
+author: "structify"
+language: "typescript"
+architecture: "clean"
+description: "Clean Architecture en TypeScript con runtime express/fastify (stubs)"
+tags: ["typescript", "clean", "api"]
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    validate: "^[a-z][a-z0-9-]+$"
+
+  - id: runtime
+    prompt: "Runtime?"
+    type: enum
+    options: [express, fastify]
+    default: express
+
+  - id: use_prisma
+    prompt: "Include Prisma?"
+    type: bool
+    default: false
+
+files:
+  - include: "src/http/routes.ts.tmpl"
+    when: runtime == "express"
+
+  - include: "src/http/server.ts.tmpl"
+    when: runtime == "express"
+
+steps:
+  - name: "npm init"
+    run: "npm init -y"
+
+  - name: "install runtime"
+    run: "npm install {{ runtime }}"
+
+  - name: "install dev deps"
+    run: "npm install -D typescript @types/node"
+
+  - name: "install prisma"
+    run: "npm install prisma @prisma/client"
+    when: use_prisma == true
+

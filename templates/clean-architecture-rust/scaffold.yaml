@@ -1,0 +1,27 @@
+name: "clean-architecture-rust"
+version: "0.0.1"
+author: "structify"
+language: "rust"
+architecture: "clean"
+description: "Clean Architecture en Rust con transport axum/actix (stubs)"
+tags: ["rust", "clean", "api"]
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    validate: "^[a-z][a-z0-9-]+$"
+
+  - id: transport
+    prompt: "Transport layer?"
+    type: enum
+    options: [axum, actix, none]
+    default: axum
+
+files: []
+
+steps:
+  - name: "cargo build"
+    run: "cargo build"
+    when: transport != "none"
+

@@ -1,0 +1,51 @@
+package main
+
+import (
+	"encoding/json"
+	"log"
+	"net"
+	"net/http"
+)
+
+func main() {
+	transport := "{{ transport }}"
+
+	switch transport {
+	case "http":
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		})
+
+		addr := ":8080"
+		log.Printf("HTTP listening on %s", addr)
+		if err := http.ListenAndServe(addr, mux); err != nil {
+			log.Fatal(err)
+		}
+
+	case "grpc":
+		// Stub gRPC transport (no protobuf/service wiring in this MVP).
+		// This keeps the generated project functional and compilable.
+		addr := ":50051"
+		log.Printf("gRPC transport selected; starting stub listener on %s", addr)
+
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer func() { _ = ln.Close() }()
+
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				continue
+			}
+			_ = conn.Close()
+		}
+
+	default:
+		log.Fatalf("unknown transport %q", transport)
+	}
+}
+

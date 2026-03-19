@@ -1,0 +1,22 @@
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"{{ module_path }}/config"
+	"{{ module_path }}/features/health"
+)
+
+func main() {
+	cfg := config.Load()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/health", health.HealthHandler)
+
+	log.Printf("HTTP listening on :%s", cfg.Port)
+	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
+		log.Fatal(err)
+	}
+}
+

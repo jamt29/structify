@@ -1,0 +1,11 @@
+package http
+
+import nethttp "net/http"
+
+// NewRouter registra endpoints HTTP básicos.
+func NewRouter() nethttp.Handler {
+	mux := nethttp.NewServeMux()
+	mux.HandleFunc("/health", HealthHandler)
+	return mux
+}
+

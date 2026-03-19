@@ -108,6 +108,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Resolve nested interpolations inside string input values (e.g. module_path defaults).
+	if err := resolveContextInterpolations(ctx); err != nil {
+		return fmt.Errorf("resolving nested input interpolations: %w", err)
+	}
+
 	projectName := ctxString(ctx, "project_name")
 	if strings.TrimSpace(projectName) == "" {
 		return fmt.Errorf("project_name is required")
@@ -364,6 +369,27 @@ func parseBool(s string) (bool, bool) {
 	default:
 		return false, false
 	}
+}
+
+func resolveContextInterpolations(ctx dsl.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	for k, v := range ctx {
+		s, ok := v.(string)
+		if !ok {
+			continue
+		}
+		if !strings.Contains(s, "{{") {
+			continue
+		}
+		resolved, err := dsl.Interpolate(s, ctx)
+		if err != nil {
+			return fmt.Errorf("input %q: %w", k, err)
+		}
+		ctx[k] = resolved
+	}
+	return nil
 }
 
 func runNonInteractive(req *template.ScaffoldRequest) (*template.ScaffoldResult, error) {

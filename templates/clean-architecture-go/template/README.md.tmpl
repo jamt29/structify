@@ -1,0 +1,23 @@
+# {{ project_name | pascal_case }}
+
+Clean Architecture en Go (MVP) con un endpoint `GET /health` para `transport=http` y un stub para `transport=grpc`.
+
+## Estructura
+- `cmd/`: entrypoint de la aplicación
+- `internal/domain/`: entidades/contratos de dominio (incluye un contrato de repositorio)
+- `internal/transport/`: adaptadores HTTP/gRPC
+
+## Ejecutar
+
+```bash
+make build
+make run
+```
+
+- `transport=http`: servir `http://localhost:8080/health`
+- `transport=grpc`: stub listener en `localhost:50051` (sin wiring de protobuf en este MVP)
+
+## Desarrollo
+
+El template genera stubs de repositorio según la variable `orm` (cuando aplica) y configura el módulo Go con `{{ module_path }}`.
+

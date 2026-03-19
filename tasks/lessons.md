@@ -44,3 +44,13 @@
 - **Contexto:** La integración con GitHub introduce dependencias de red (`go-git`, API HTTP) en los comandos `template add/update`, que no deben ejecutarse en tests unitarios.
 - **Lección:** Definir interfaces pequeñas (por ejemplo `githubClient` y factorías como `newGitHubClientFn`) para inyectar implementaciones fake en tests. Así se prueban flujos completos de CLI sin red real, simulando errores y estados de metadata de forma determinista.
 - **Aplicar en:** `internal/template/github.go`, `cmd/template/add.go`, `cmd/template/update.go`, `cmd/template/add_test.go`, `cmd/template/update_test.go`.
+
+### L011 — Dotfiles en `go:embed`
+- **Contexto:** Los built-in templates incluían `.gitignore` y `.gitkeep`, pero el patrón `//go:embed templates/**` omitía archivos cuyo último segmento de path empieza con `.`.
+- **Lección:** Validar explícitamente la presencia de dotfiles en built-ins y embebirlos mediante patrones explícitos o inclusión controlada, evitando asumir que `**` los cubre.
+- **Aplicar en:** `builtin_templates.go` y validación end-to-end con `new --dry-run`.
+
+### L012 — Interpolación anidada en defaults de inputs
+- **Contexto:** Algunos templates requieren defaults que usan interpolación basada en otros inputs, por ejemplo `module_path` con `{{ project_name | kebab_case }}`.
+- **Lección:** Resolver interpolaciones anidadas dentro de valores string del contexto una vez que ya están definidas las variables base.
+- **Aplicar en:** `cmd/new.go` (función `resolveContextInterpolations`).

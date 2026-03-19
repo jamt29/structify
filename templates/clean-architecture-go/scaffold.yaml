@@ -1,0 +1,67 @@
+name: "clean-architecture-go"
+version: "0.0.1"
+author: "structify"
+language: "go"
+architecture: "clean"
+description: "Clean Architecture en Go con soporte HTTP/gRPC (stubs)"
+tags: ["go", "clean", "api"]
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    validate: "^[a-z][a-z0-9-]+$"
+
+  - id: module_path
+    prompt: "Module path?"
+    type: string
+    default: "github.com/user/{{ project_name | kebab_case }}"
+
+  - id: transport
+    prompt: "Transport layer?"
+    type: enum
+    options: [http, grpc]
+    default: http
+
+  - id: orm
+    prompt: "ORM?"
+    type: enum
+    options: [gorm, sqlx, none]
+    default: none
+    when: transport != "grpc"
+
+files:
+  - include: "internal/transport/http/**"
+    when: transport == "http"
+
+  - include: "internal/transport/grpc/**"
+    when: transport == "grpc"
+
+  - include: "internal/domain/repository/gorm/**"
+    when: transport != "grpc" && orm == "gorm"
+
+  - include: "internal/domain/repository/sqlx/**"
+    when: transport != "grpc" && orm == "sqlx"
+
+  - include: "internal/domain/repository/none/**"
+    when: transport == "grpc" || orm == "none"
+
+steps:
+  - name: "go mod init"
+    run: "go mod init {{ module_path }}"
+
+  - name: "install gRPC deps"
+    run: "go get google.golang.org/grpc"
+    when: transport == "grpc"
+
+  - name: "install gorm deps"
+    run: "go get gorm.io/gorm"
+    when: transport != "grpc" && orm == "gorm"
+
+  - name: "install sqlx deps"
+    run: "go get github.com/jmoiron/sqlx"
+    when: transport != "grpc" && orm == "sqlx"
+
+  - name: "go mod tidy"
+    run: "go mod tidy"
+

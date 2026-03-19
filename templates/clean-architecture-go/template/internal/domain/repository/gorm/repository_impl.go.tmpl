@@ -1,0 +1,31 @@
+package gorm
+
+import (
+	"gorm.io/gorm"
+
+	repo "{{ module_path }}/internal/domain/repository"
+)
+
+// ExampleRepository es un stub que implementa el contrato del repositorio.
+// Scaffold steps instalan gorm.io/gorm cuando `orm == "gorm"`.
+type ExampleRepository struct {
+	db *gorm.DB
+}
+
+func NewRepository(db *gorm.DB) *ExampleRepository {
+	return &ExampleRepository{db: db}
+}
+
+func (r *ExampleRepository) GetByID(id string) (string, error) {
+	_ = id
+	return "", nil
+}
+
+func (r *ExampleRepository) Save(id string, value string) error {
+	_ = id
+	_ = value
+	return nil
+}
+
+var _ repo.{{ project_name | pascal_case }}Repository = (*ExampleRepository)(nil)
+

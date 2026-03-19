@@ -78,3 +78,19 @@ func TestDryRunSteps_ShowsSkipReason(t *testing.T) {
 	}
 }
 
+func TestResolveContextInterpolations_ModulePathDefault(t *testing.T) {
+	ctx := dsl.Context{
+		"project_name": "MyProject",
+		"module_path":  "github.com/user/{{ project_name | kebab_case }}",
+	}
+
+	if err := resolveContextInterpolations(ctx); err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+
+	got := ctxString(ctx, "module_path")
+	if got != "github.com/user/my-project" {
+		t.Fatalf("expected resolved module_path, got %q", got)
+	}
+}
+

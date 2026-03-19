@@ -63,3 +63,21 @@
 - [x] 6.5 — Formato estándar de repos de templates (`docs/template-format.md`)
 - [x] 6.6 — Tests, verificación global y resultado de fase (`tasks/FASE6-RESULTADO.md`)
 
+## Fase 7 — Templates Built-in
+
+- [x] 7.1 — Templates: clean-architecture-go
+- [x] 7.2 — Templates: vertical-slice-go
+- [x] 7.3 — Templates: clean-architecture-ts
+- [x] 7.4 — Templates: vertical-slice-ts
+- [x] 7.5 — Templates: clean-architecture-rust
+- [x] 7.6 — Verificar built-ins end-to-end (template info + new --dry-run)
+
+## Fase 8 — Distribución
+
+- [x] 8.1 — GoReleaser (`.goreleaser.yaml`) + brews (Homebrew tap)
+- [x] 8.2 — GitHub Actions CI/CD (`.github/workflows/ci.yml`, `release.yml`)
+- [x] 8.3 — README principal
+- [x] 8.4 — Documentación de comandos y DSL (`docs/commands.md`, `docs/dsl-reference.md`)
+- [x] 8.5 — Homebrew opcional (brews en `.goreleaser.yaml`)
+
+

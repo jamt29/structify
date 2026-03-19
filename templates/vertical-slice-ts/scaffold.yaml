@@ -1,0 +1,29 @@
+name: "vertical-slice-ts"
+version: "0.0.1"
+author: "structify"
+language: "typescript"
+architecture: "vertical-slice"
+description: "Vertical Slice en TypeScript con runtime express/fastify (stubs)"
+tags: ["typescript", "vertical-slice", "api"]
+inputs:
+  - id: project_name
+    prompt: "Project name?"
+    type: string
+    required: true
+    validate: "^[a-z][a-z0-9-]+$"
+
+  - id: runtime
+    prompt: "Runtime?"
+    type: enum
+    options: [express, fastify]
+    default: express
+
+files: []
+
+steps:
+  - name: "install runtime"
+    run: "npm install {{ runtime }}"
+
+  - name: "install dev deps"
+    run: "npm install -D typescript @types/node"
+

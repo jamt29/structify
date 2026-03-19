@@ -1,0 +1,12 @@
+import { healthPayload } from "./health.handler";
+
+const runtime = "{{ runtime }}";
+
+export function registerHealthRoutes(app: any) {
+  if (runtime === "express") {
+    app.get("/health", (_req: any, res: any) => res.json(healthPayload()));
+  } else {
+    app.get("/health", async () => healthPayload());
+  }
+}
+

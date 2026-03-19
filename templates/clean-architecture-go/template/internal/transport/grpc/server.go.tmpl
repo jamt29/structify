@@ -1,0 +1,26 @@
+package grpc
+
+import (
+	"log"
+	"net"
+
+	"google.golang.org/grpc"
+)
+
+// StartServerStub levanta un servidor gRPC vacío (sin servicios/protobufs en este MVP).
+func StartServerStub(addr string) error {
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	s := grpc.NewServer()
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Printf("grpc server stopped: %v", err)
+		}
+	}()
+
+	return nil
+}
+

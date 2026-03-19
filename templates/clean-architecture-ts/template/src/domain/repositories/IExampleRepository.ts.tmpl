@@ -1,0 +1,5 @@
+export interface IExampleRepository {
+  getById(id: string): Promise<string | null>;
+  save(id: string, value: string): Promise<void>;
+}
+

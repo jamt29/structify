@@ -1,0 +1,15 @@
+import { registerRoutes } from "./routes";
+
+export function start() {
+  const express = require("express");
+  const app = express();
+
+  registerRoutes(app);
+
+  const port = Number(process.env.PORT ?? "3000");
+  app.listen(port, () => {
+    // eslint-disable-next-line no-console
+    console.log(`HTTP listening on http://localhost:${port}/health`);
+  });
+}
+
