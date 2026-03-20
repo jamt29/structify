@@ -79,3 +79,8 @@
 - **Contexto:** En el TUI unificado apareció `"<nil>"` como valor visible al construir inputs desde `fmt.Sprint(ctx[id])` cuando no existía respuesta previa.
 - **Lección:** Para `textinput`, usar helper que convierta `nil` a string vacío y setear placeholder explícito (`default` o `""`), evitando exponer valores técnicos al usuario.
 - **Aplicar en:** `internal/tui/app.go` (`prepareInputs`, helpers de respuestas).
+
+### L018 — Menús TUI en root necesitan salida explícita para tests/no-TTY
+- **Contexto:** Al mover `structify` (sin subcomando) a TUI, en entornos sin `/dev/tty` el menú falla al abrir terminal interactiva y puede romper flujos de prueba.
+- **Lección:** Encapsular `RunMenu` detrás de función inyectable y manejar un error sentinel de salida (`ErrMenuExit`) para tener salida limpia y pruebas deterministas.
+- **Aplicar en:** `cmd/root.go`, `internal/tui/menu.go`, tests de comando raíz.

@@ -36,4 +36,30 @@ var (
 	styleHelpBar = lipgloss.NewStyle().
 			Foreground(colorMuted).
 			MarginTop(1)
+
+	styleWelcomeTagline = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Italic(true)
+
+	styleWelcomeVersion = lipgloss.NewStyle().
+				Foreground(colorBorder)
+
+	styleMenuItem = lipgloss.NewStyle().
+			Foreground(colorMuted).
+			Padding(0, 1)
+
+	styleMenuItemActive = lipgloss.NewStyle().
+				Foreground(colorText).
+				Background(lipgloss.Color("#2d2f3f")).
+				BorderLeft(true).
+				BorderForeground(colorPrimary).
+				Padding(0, 1)
+
+	styleMenuLabel = lipgloss.NewStyle().
+			Foreground(colorText).
+			Bold(true)
+
+	styleMenuArrow = lipgloss.NewStyle().
+			Foreground(colorPrimary).
+			Bold(true)
 )
