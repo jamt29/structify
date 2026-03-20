@@ -20,7 +20,17 @@ func TestWriteScaffoldYAML_CreatesMinimalManifest(t *testing.T) {
 		t.Fatalf("read scaffold.yaml: %v", err)
 	}
 	s := string(b)
-	if !containsAll(s, []string{"name: \"my-template\"", "language: \"go\"", "architecture: \"clean\""}) {
+	if !containsAll(s, []string{
+		`name: "my-template"`,
+		`language: "go"`,
+		`architecture: "clean"`,
+		`description: "desc"`,
+		`author: "alice"`,
+		`id: "project_name"`,
+		`required: true`,
+		`validate: "^[a-zA-Z][a-zA-Z0-9_-]*$"`,
+		`steps: []`,
+	}) {
 		t.Fatalf("unexpected scaffold.yaml content: %s", s)
 	}
 }

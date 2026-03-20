@@ -64,3 +64,13 @@
 - **Contexto:** `go build -o ./bin/structify ./` produjo un `ar archive` (no un ejecutable) porque el package raíz no era `main`.
 - **Lección:** Para producir el binario del CLI, compilar desde `./cmd/structify` (donde vive `package main`), no desde `./`.
 - **Aplicar en:** desarrollo local y preparación de checks/dry-runs del release.
+
+### L015 — Validar `inputs[].validate` también en modo flags
+- **Contexto:** El modo TUI valida valores del usuario contra `inputs[].validate` (regex), pero el modo “flags-only” (`--name`, `--dry-run`) podía saltarse esa validación, dejando que valores inválidos pasaran sin error.
+- **Lección:** En `cmd/new.go`, aplicar explícitamente `inputs[].validate` sobre el `dsl.Context` final antes de construir el request (para que TUI y flags tengan el mismo contrato).
+- **Aplicar en:** `cmd/new.go` (función `validateManifestInputs`).
+
+### L016 — `template create` debe generar scaffold mínimamente usable + UX consistente
+- **Contexto:** `template create` generaba `scaffold.yaml` con `inputs: []`, por lo que `structify new` no podía pedir/obtener `project_name` en modo interactivo. Además, el wizard se hacía con `bufio.Reader` en lugar de reutilizar los componentes Bubbletea existentes.
+- **Lección:** Generar siempre `inputs` mínimos (como `project_name` con `validate`) y una carpeta base `template/.gitkeep`, y reutilizar `tui.RunInputs` para que el wizard se sienta igual que `new` (y respete ESC/cancel).
+- **Aplicar en:** `cmd/template/create.go` (`writeScaffoldYAML` + wizard).

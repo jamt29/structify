@@ -118,6 +118,12 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("project_name is required")
 	}
 
+	// Ensure `validate` regexes from scaffold.yaml are enforced in both
+	// interactive and flag-only modes.
+	if err := validateManifestInputs(manifestInputs, ctx); err != nil {
+		return err
+	}
+
 	// 5. Build request.
 	outputDir, err := resolveOutputDir(newOutput, projectName)
 	if err != nil {
@@ -599,6 +605,36 @@ func dryRunSteps(steps []dsl.Step, ctx dsl.Context) []string {
 		}
 	}
 	return lines
+}
+
+func validateManifestInputs(inputs []dsl.Input, ctx dsl.Context) error {
+	if ctx == nil {
+		return nil
+	}
+
+	for _, in := range inputs {
+		id := strings.TrimSpace(in.ID)
+		if id == "" {
+			continue
+		}
+		if strings.TrimSpace(in.Validate) == "" {
+			continue
+		}
+
+		v, ok := ctx[id]
+		if !ok {
+			if in.Required {
+				return fmt.Errorf("invalid value for %q: value is required", id)
+			}
+			continue
+		}
+
+		if err := tui.ValidateInputValue(in, fmt.Sprint(v)); err != nil {
+			return fmt.Errorf("invalid value for %q: %w", id, err)
+		}
+	}
+
+	return nil
 }
 
 
