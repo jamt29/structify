@@ -35,10 +35,11 @@ type progressLine struct {
 }
 
 type inputEntry struct {
-	in   dsl.Input
-	kind string
-	ti   textinput.Model
-	enum list.Model
+	in      dsl.Input
+	kind    string
+	ti      textinput.Model
+	enum    list.Model
+	boolVal bool
 }
 
 type App struct {
@@ -200,16 +201,40 @@ func (a *App) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.state = stateSelectTemplate
 			return a, nil
 		case "tab":
-			if a.compactForm && len(a.inputs) > 0 {
+			if len(a.inputs) > 0 {
 				a.activeInput = (a.activeInput + 1) % len(a.inputs)
 				return a, nil
 			}
 		case "shift+tab":
-			if a.compactForm && len(a.inputs) > 0 {
+			if len(a.inputs) > 0 {
 				a.activeInput--
 				if a.activeInput < 0 {
 					a.activeInput = len(a.inputs) - 1
 				}
+				return a, nil
+			}
+		case "left":
+			if e := a.currentInput(); e != nil && e.kind == "bool" {
+				e.boolVal = false
+				a.inputs[a.activeInput] = *e
+				return a, nil
+			}
+		case "right":
+			if e := a.currentInput(); e != nil && e.kind == "bool" {
+				e.boolVal = true
+				a.inputs[a.activeInput] = *e
+				return a, nil
+			}
+		case "y":
+			if e := a.currentInput(); e != nil && e.kind == "bool" {
+				e.boolVal = true
+				a.inputs[a.activeInput] = *e
+				return a, nil
+			}
+		case "n":
+			if e := a.currentInput(); e != nil && e.kind == "bool" {
+				e.boolVal = false
+				a.inputs[a.activeInput] = *e
 				return a, nil
 			}
 		case "enter":
@@ -255,7 +280,7 @@ func (a *App) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 	entry := a.inputs[idx]
 	var cmd tea.Cmd
 	switch entry.kind {
-	case "string", "bool":
+	case "string":
 		entry.ti, cmd = entry.ti.Update(msg)
 	case "enum":
 		entry.enum, cmd = entry.enum.Update(msg)
@@ -292,6 +317,9 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		a.spin, cmd = a.spin.Update(m)
 		return a, cmd
+	case msgFilesDone:
+		a.progressLog = append(a.progressLog, progressLine{name: "files", status: "done", command: fmt.Sprintf("Archivos generados (%d archivos)", m.count)})
+		return a, waitProgressMsg(a.progressCh)
 	case msgStepStart:
 		a.progressLog = append(a.progressLog, progressLine{name: m.name, status: "running", command: m.command})
 		return a, waitProgressMsg(a.progressCh)
@@ -321,22 +349,38 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case msgProgressClosed:
 		return a, nil
-	case msgFilesDone:
-		return a, waitProgressMsg(a.progressCh)
 	}
 	return a, nil
 }
 
 func (a *App) View() string {
 	if a.width < 80 || a.height < 24 {
-		return "Terminal too small. Minimum 80x24."
+		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
-	parts := []string{
-		lipgloss.NewStyle().Bold(true).Render(twoCols(a.width, " structify · "+a.templateName(), " "+a.stepLabel()+" ")),
+	content := strings.Join([]string{
+		a.renderHeader(),
 		a.renderBody(),
-		lipgloss.NewStyle().Faint(true).Render(" " + a.helpText()),
+		styleHelpBar.Render(" " + a.helpText()),
+	}, "\n")
+	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, content)
+}
+
+func (a *App) renderHeader() string {
+	parts := []string{styleHeader.Render("structify")}
+	if name := strings.TrimSpace(a.templateName()); name != "" {
+		parts = append(parts, styleCompletedValue.Render(name))
 	}
-	return strings.Join(parts, "\n")
+	step := strings.TrimSpace(a.stepLabel())
+	if step != "" {
+		if step == "✓ listo" {
+			parts = append(parts, styleCheckmark.Render(step))
+		} else if step == "error" {
+			parts = append(parts, lipgloss.NewStyle().Foreground(colorError).Render(step))
+		} else {
+			parts = append(parts, stylePending.Render(step))
+		}
+	}
+	return strings.Join(parts, stylePending.Render("  ·  "))
 }
 
 func (a *App) renderBody() string {
@@ -360,67 +404,101 @@ func (a *App) renderBody() string {
 
 func (a *App) renderInputs() string {
 	if len(a.inputs) == 0 {
-		return "No hay inputs activos. Presiona Enter para continuar."
+		return stylePending.Render("No hay inputs activos. Presiona Enter para continuar.")
 	}
 	var b strings.Builder
-	b.WriteString("\n")
-	if a.compactForm {
-		for i, e := range a.inputs {
-			mark := "  "
-			if i == a.activeInput {
-				mark = "> "
-			}
-			b.WriteString(mark + strings.TrimSpace(e.in.Prompt) + "\n")
-			switch e.kind {
-			case "string", "bool":
-				b.WriteString("  " + e.ti.View() + "\n\n")
-			case "enum":
-				b.WriteString(e.enum.View() + "\n\n")
-			}
+	if !a.compactForm {
+		b.WriteString(stylePending.Render(fmt.Sprintf("Input %d de %d", a.activeInput+1, len(a.inputs))))
+		b.WriteString("\n\n")
+	}
+	for i, e := range a.inputs {
+		active := i == a.activeInput
+		completed := a.inputCompleted(i)
+		if !a.compactForm && !active && !completed {
+			b.WriteString(stylePending.Render(strings.TrimSpace(e.in.Prompt)))
+		} else {
+			b.WriteString(a.renderInputBlock(e, active, completed))
 		}
-		return b.String()
-	}
-	idx := a.activeInput
-	if idx >= len(a.inputs) {
-		idx = len(a.inputs) - 1
-	}
-	e := a.inputs[idx]
-	b.WriteString(fmt.Sprintf("Input %d de %d\n\n", idx+1, len(a.inputs)))
-	b.WriteString(strings.TrimSpace(e.in.Prompt) + "\n")
-	if e.kind == "enum" {
-		b.WriteString(e.enum.View())
-	} else {
-		b.WriteString(e.ti.View())
+		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func (a *App) renderInputBlock(e inputEntry, active bool, completed bool) string {
+	prompt := strings.TrimSpace(e.in.Prompt)
+	if prompt == "" {
+		prompt = strings.TrimSpace(e.in.ID)
+	}
+	if completed && !active {
+		val, _ := entryValue(e)
+		return styleCompletedLabel.Render(prompt) + "\n" + styleCompletedValue.Render(val+"  ") + styleCheckmark.Render("✓")
+	}
+	if !active {
+		return stylePending.Render(prompt)
+	}
+
+	var body string
+	switch e.kind {
+	case "string":
+		v := strings.TrimSpace(e.ti.Value())
+		if v == "" && strings.TrimSpace(e.ti.Placeholder) != "" {
+			v = e.ti.Placeholder
+		}
+		if v == "" {
+			v = stylePending.Render(prompt)
+		}
+		body = fmt.Sprint(v)
+	case "enum":
+		lines := make([]string, 0, len(e.in.Options))
+		cur, _ := entryValue(e)
+		for _, opt := range e.in.Options {
+			if opt == cur {
+				lines = append(lines, styleCompletedValue.Render("> "+opt))
+			} else {
+				lines = append(lines, stylePending.Render("  "+opt))
+			}
+		}
+		body = strings.Join(lines, "\n")
+	case "bool":
+		no := stylePending.Render("No")
+		yes := stylePending.Render("Yes")
+		if !e.boolVal {
+			no = lipgloss.NewStyle().Foreground(colorText).Background(colorBorder).Padding(0, 1).Render("No")
+		} else {
+			yes = lipgloss.NewStyle().Foreground(colorText).Background(colorBorder).Padding(0, 1).Render("Yes")
+		}
+		body = "[ " + no + " ]  /  [ " + yes + " ]"
+	}
+	return styleActiveBox.Render(prompt + "\n" + body)
 }
 
 func (a *App) renderConfirm() string {
 	var b strings.Builder
-	b.WriteString("\nSe va a crear:\n\n")
-	b.WriteString("Template: " + a.templateName() + "\n")
-	b.WriteString("Output  : " + prettyPath(a.outputDir()) + "\n")
-	b.WriteString("Variables:\n")
-	for k, v := range a.answers {
-		b.WriteString(fmt.Sprintf("  - %s=%v\n", k, v))
+	b.WriteString("Confirmar creación\n\n")
+	b.WriteString(styleCompletedLabel.Render("Template  ") + styleCompletedValue.Render(a.templateName()) + "\n")
+	b.WriteString(styleCompletedLabel.Render("Output    ") + styleCompletedValue.Render(prettyPath(a.outputDir())) + "\n\n")
+	b.WriteString(styleCompletedLabel.Render("Variables") + "\n")
+	b.WriteString(stylePending.Render(strings.Repeat("─", 44)) + "\n")
+	for _, kv := range sortedContextPairs(a.answers) {
+		b.WriteString(styleCompletedLabel.Render(padRight(kv.key, 14)) + " " + styleCompletedValue.Render(kv.value) + "\n")
 	}
-	return b.String()
+	return styleActiveBox.Width(min(a.width-8, 72)).Render(b.String())
 }
 
 func (a *App) renderProgress() string {
 	var b strings.Builder
-	b.WriteString("\n")
-	b.WriteString(a.spin.View() + " Creando " + ctxStringMap(a.answers, "project_name") + "...\n\n")
+	b.WriteString(styleCompletedValue.Render("Creando " + ctxStringMap(a.answers, "project_name") + "..."))
+	b.WriteString("\n\n")
 	for _, line := range a.progressLog {
 		switch line.status {
 		case "running":
-			b.WriteString(a.spin.View() + " " + line.command + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(colorActive).Render(a.spin.View()) + " " + styleCompletedValue.Render(line.command) + "\n")
 		case "done":
-			b.WriteString("✓ " + line.command + "\n")
+			b.WriteString(styleCheckmark.Render("✓ ") + styleCompletedValue.Render(line.command) + "\n")
 		case "skipped":
-			b.WriteString("─ " + line.command + " (skipped)\n")
+			b.WriteString(stylePending.Render("─ " + line.command + " (skipped)") + "\n")
 		case "error":
-			b.WriteString("✗ " + line.command + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗ " + line.command) + "\n")
 		}
 	}
 	return b.String()
@@ -428,25 +506,36 @@ func (a *App) renderProgress() string {
 
 func (a *App) renderDone() string {
 	var b strings.Builder
-	b.WriteString("\n✓ Proyecto creado exitosamente\n\n")
+	b.WriteString(styleCheckmark.Render("✓  Proyecto creado exitosamente"))
+	b.WriteString("\n\n")
 	if a.result != nil {
-		b.WriteString("Ruta   : " + a.outputDir() + "\n")
-		b.WriteString(fmt.Sprintf("Archivos: %d\n\n", len(a.result.FilesCreated)))
-		b.WriteString("Steps ejecutados:\n")
+		b.WriteString(styleCompletedLabel.Render("Ruta     ") + styleCompletedValue.Render(a.outputDir()) + "\n")
+		b.WriteString(styleCompletedLabel.Render("Archivos ") + styleCompletedValue.Render(fmt.Sprintf("%d", len(a.result.FilesCreated))) + "\n\n")
+		b.WriteString(styleCompletedValue.Render("Steps") + "\n")
 		for _, s := range a.result.StepsExecuted {
+			cmd := strings.TrimSpace(s.Command)
+			if cmd == "" {
+				cmd = strings.TrimSpace(s.Name)
+			}
 			if s.Skipped {
-				b.WriteString("  ─ " + s.Command + " (skipped)\n")
+				b.WriteString(stylePending.Render("─  " + cmd + "  (skipped)") + "\n")
 			} else if s.Error != nil {
-				b.WriteString("  ✗ " + s.Command + "\n")
+				b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗  " + cmd) + "\n")
 			} else {
-				b.WriteString("  ✓ " + s.Command + "\n")
+				b.WriteString(styleCheckmark.Render("✓  ") + styleCompletedValue.Render(cmd) + "\n")
 			}
 		}
 	}
-	b.WriteString("\nPróximos pasos:\n")
+	b.WriteString("\n")
+	b.WriteString(styleCompletedValue.Render("Próximos pasos") + "\n")
+	b.WriteString(stylePending.Render(strings.Repeat("─", 14)) + "\n")
+	var block strings.Builder
 	for _, line := range nextSteps(a.language(), ctxStringMap(a.answers, "project_name")) {
-		b.WriteString("  " + line + "\n")
+		block.WriteString(line + "\n")
 	}
+	b.WriteString(lipgloss.NewStyle().BorderLeft(true).BorderForeground(colorActive).PaddingLeft(1).Render(strings.TrimSpace(block.String())))
+	b.WriteString("\n\n")
+	b.WriteString(stylePending.Render("(presiona cualquier tecla para salir)"))
 	return b.String()
 }
 
@@ -455,7 +544,7 @@ func (a *App) renderError() string {
 	if a.err != nil {
 		msg = a.err.Error()
 	}
-	return "\n✗ " + msg + "\n"
+	return lipgloss.NewStyle().Foreground(colorError).Bold(true).Render("✗ " + msg)
 }
 
 func (a *App) prepareInputs() {
@@ -476,21 +565,24 @@ func (a *App) prepareInputs() {
 		switch entry.kind {
 		case "string":
 			entry.ti = textinput.New()
-			entry.ti.Prompt = "> "
+			entry.ti.Prompt = ""
 			def, _ := ApplyDefault(in, a.answers)
-			entry.ti.Placeholder = def
-			entry.ti.SetValue(fmt.Sprint(a.answers[id]))
+			if strings.TrimSpace(def) != "" {
+				entry.ti.Placeholder = def
+			} else {
+				entry.ti.Placeholder = ""
+			}
+			entry.ti.SetValue(answerString(a.answers, id))
 			entry.ti.Focus()
 		case "bool":
-			entry.ti = textinput.New()
-			entry.ti.Prompt = "> "
 			def, _ := ApplyDefault(in, a.answers)
-			if strings.TrimSpace(def) == "" {
-				def = "n"
+			if ans, ok := a.answers[id]; ok && ans != nil {
+				s := strings.ToLower(strings.TrimSpace(fmt.Sprint(ans)))
+				entry.boolVal = s == "true" || s == "1" || s == "yes" || s == "y"
+			} else {
+				s := strings.ToLower(strings.TrimSpace(def))
+				entry.boolVal = s == "true" || s == "1" || s == "yes" || s == "y"
 			}
-			entry.ti.Placeholder = def
-			entry.ti.SetValue(fmt.Sprint(a.answers[id]))
-			entry.ti.Focus()
 		case "enum":
 			items := make([]list.Item, 0, len(in.Options))
 			for _, opt := range in.Options {
@@ -501,10 +593,10 @@ func (a *App) prepareInputs() {
 			l.SetShowStatusBar(false)
 			l.SetShowHelp(false)
 			l.Title = strings.TrimSpace(in.Prompt)
-			cur := strings.TrimSpace(fmt.Sprint(a.answers[id]))
+			cur := strings.TrimSpace(answerString(a.answers, id))
 			if cur == "" {
 				def, _ := ApplyDefault(in, a.answers)
-				cur = def
+				cur = strings.TrimSpace(def)
 			}
 			for i, opt := range in.Options {
 				if opt == cur {
@@ -598,15 +690,17 @@ func (a *App) language() string {
 func (a *App) stepLabel() string {
 	switch a.state {
 	case stateSelectTemplate:
-		return "paso 1 de 4"
+		return ""
 	case stateInputs:
 		return "paso 2 de 4"
 	case stateConfirm:
 		return "paso 3 de 4"
 	case stateProgress:
-		return "paso 3 de 4"
-	case stateDone, stateError:
 		return "paso 4 de 4"
+	case stateDone:
+		return "✓ listo"
+	case stateError:
+		return "error"
 	default:
 		return ""
 	}
@@ -643,19 +737,40 @@ func (a *App) resizeComponents() {
 	a.selector.SetSize(a.width-2, h)
 	for i := range a.inputs {
 		if a.inputs[i].kind == "enum" {
-			a.inputs[i].enum.SetSize(a.width-4, min(max(4, h-4), 12))
+			a.inputs[i].enum.SetSize(a.width-8, min(max(4, h-6), 10))
 		}
 	}
 }
 
+func (a *App) currentInput() *inputEntry {
+	if len(a.inputs) == 0 || a.activeInput < 0 || a.activeInput >= len(a.inputs) {
+		return nil
+	}
+	return &a.inputs[a.activeInput]
+}
+
+func (a *App) inputCompleted(i int) bool {
+	if i < 0 || i >= len(a.inputs) {
+		return false
+	}
+	id := strings.TrimSpace(a.inputs[i].in.ID)
+	_, ok := a.answers[id]
+	return ok
+}
+
 func entryValue(e inputEntry) (string, error) {
 	switch e.kind {
-	case "string", "bool":
+	case "string":
 		v := strings.TrimSpace(e.ti.Value())
 		if v == "" {
 			v = strings.TrimSpace(e.ti.Placeholder)
 		}
 		return v, nil
+	case "bool":
+		if e.boolVal {
+			return "true", nil
+		}
+		return "false", nil
 	case "enum":
 		it, ok := e.enum.SelectedItem().(enumItem)
 		if !ok {
@@ -760,16 +875,6 @@ func runScaffoldWithProgress(req *tmpl.ScaffoldRequest, ch chan<- tea.Msg) (*tmp
 	}, nil
 }
 
-func twoCols(width int, left, right string) string {
-	left = strings.TrimSpace(left)
-	right = strings.TrimSpace(right)
-	total := len(left) + len(right)
-	if total+1 >= width {
-		return left + " " + right
-	}
-	return left + strings.Repeat(" ", width-total) + right
-}
-
 func ctxStringMap(ctx map[string]any, key string) string {
 	v, ok := ctx[key]
 	if !ok || v == nil {
@@ -798,6 +903,45 @@ func prettyPath(path string) string {
 		return "." + string(os.PathSeparator) + rel
 	}
 	return path
+}
+
+type kvPair struct {
+	key   string
+	value string
+}
+
+func sortedContextPairs(ctx dsl.Context) []kvPair {
+	keys := make([]string, 0, len(ctx))
+	for k := range ctx {
+		keys = append(keys, k)
+	}
+	for i := 0; i < len(keys); i++ {
+		for j := i + 1; j < len(keys); j++ {
+			if keys[j] < keys[i] {
+				keys[i], keys[j] = keys[j], keys[i]
+			}
+		}
+	}
+	out := make([]kvPair, 0, len(keys))
+	for _, k := range keys {
+		out = append(out, kvPair{key: k, value: fmt.Sprint(ctx[k])})
+	}
+	return out
+}
+
+func padRight(s string, w int) string {
+	if len(s) >= w {
+		return s
+	}
+	return s + strings.Repeat(" ", w-len(s))
+}
+
+func answerString(ctx dsl.Context, key string) string {
+	v, ok := ctx[key]
+	if !ok || v == nil {
+		return ""
+	}
+	return fmt.Sprint(v)
 }
 
 func max(a, b int) int {

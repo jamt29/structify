@@ -74,3 +74,8 @@
 - **Contexto:** `template create` generaba `scaffold.yaml` con `inputs: []`, por lo que `structify new` no podía pedir/obtener `project_name` en modo interactivo. Además, el wizard se hacía con `bufio.Reader` en lugar de reutilizar los componentes Bubbletea existentes.
 - **Lección:** Generar siempre `inputs` mínimos (como `project_name` con `validate`) y una carpeta base `template/.gitkeep`, y reutilizar `tui.RunInputs` para que el wizard se sienta igual que `new` (y respete ESC/cancel).
 - **Aplicar en:** `cmd/template/create.go` (`writeScaffoldYAML` + wizard).
+
+### L017 — Nunca serializar valores nil a textinput
+- **Contexto:** En el TUI unificado apareció `"<nil>"` como valor visible al construir inputs desde `fmt.Sprint(ctx[id])` cuando no existía respuesta previa.
+- **Lección:** Para `textinput`, usar helper que convierta `nil` a string vacío y setear placeholder explícito (`default` o `""`), evitando exponer valores técnicos al usuario.
+- **Aplicar en:** `internal/tui/app.go` (`prepareInputs`, helpers de respuestas).

@@ -78,3 +78,75 @@ func TestStateTransition_InputsToDone(t *testing.T) {
 		t.Fatalf("expected done state, got %v", app.state)
 	}
 }
+
+func TestApp_RenderAndHelpers(t *testing.T) {
+	tpl := &template.Template{
+		Manifest: &dsl.Manifest{
+			Name:     "clean-architecture-go",
+			Language: "go",
+			Inputs: []dsl.Input{
+				{ID: "project_name", Type: "string", Prompt: "Project name?", Required: true, Default: "my-api"},
+				{ID: "use_prisma", Type: "bool", Prompt: "Include Prisma?", Default: false},
+				{ID: "runtime", Type: "enum", Prompt: "Runtime?", Options: []string{"express", "fastify"}, Default: "express"},
+			},
+			Steps: []dsl.Step{
+				{Name: "Init go module", Run: "go mod init github.com/user/my-api"},
+			},
+		},
+	}
+	app, err := newApp([]*template.Template{tpl}, engine.New())
+	if err != nil {
+		t.Fatalf("newApp error: %v", err)
+	}
+
+	// Select template and prepare inputs.
+	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if len(app.inputs) == 0 {
+		t.Fatalf("expected inputs")
+	}
+	app.width = 120
+	app.height = 40
+	app.inputs[0].ti.SetValue("my-api")
+
+	// Render inputs and confirm.
+	_ = app.renderInputs()
+	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if app.state != stateConfirm {
+		t.Fatalf("expected confirm state")
+	}
+	_ = app.renderConfirm()
+
+	// Header / step labels / help text.
+	_ = app.renderHeader()
+	if app.stepLabel() == "" {
+		t.Fatalf("expected step label in confirm")
+	}
+	if app.helpText() == "" {
+		t.Fatalf("expected help text")
+	}
+
+	// Progress rendering with command lines.
+	app.state = stateProgress
+	app.progressLog = []progressLine{
+		{name: "files", status: "done", command: "Archivos generados (11 archivos)"},
+		{name: "Init go module", status: "running", command: "go mod init github.com/user/my-api"},
+	}
+	_ = app.renderProgress()
+	_, _ = app.Update(msgStepDone{name: "Init go module"})
+	_ = app.renderProgress()
+
+	// Done rendering and utility helpers.
+	app.state = stateDone
+	app.result = &template.ScaffoldResult{
+		FilesCreated: []string{"a", "b"},
+		StepsExecuted: []template.StepResult{
+			{Name: "Init go module", Command: "go mod init github.com/user/my-api"},
+		},
+	}
+	_ = app.renderDone()
+	_ = app.View()
+	_ = prettyPath(app.outputDir())
+	_ = sortedContextPairs(app.answers)
+	_ = padRight("x", 4)
+	_ = max(1, 2)
+}
