@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/jamt29/structify"
 	"github.com/jamt29/structify/internal/dsl"
+	templatesfs "github.com/jamt29/structify/templates"
 )
 
 const builtinsTempDirPrefix = "structify-builtins-"
@@ -61,19 +61,19 @@ func LoadFromPath(path string) (*Template, error) {
 
 // LoadBuiltins loads templates embedded in the binary.
 func LoadBuiltins() ([]*Template, error) {
-	bfs := structify.BuiltinTemplatesFS()
+	bfs := templatesfs.BuiltinTemplatesFS()
 
-	// Ensure templates/ exists inside the embedded FS.
-	if _, err := fs.Stat(bfs, "templates"); err != nil {
+	// Ensure built-in template root exists inside the embedded FS.
+	if _, err := fs.Stat(bfs, "."); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return []*Template{}, nil
 		}
-		return nil, fmt.Errorf("stat embedded templates/: %w", err)
+		return nil, fmt.Errorf("stat embedded builtins root: %w", err)
 	}
 
-	entries, err := fs.ReadDir(bfs, "templates")
+	entries, err := fs.ReadDir(bfs, ".")
 	if err != nil {
-		return nil, fmt.Errorf("readdir embedded templates/: %w", err)
+		return nil, fmt.Errorf("readdir embedded builtins root: %w", err)
 	}
 
 	tmpRoot, err := os.MkdirTemp("", builtinsTempDirPrefix)
@@ -88,7 +88,7 @@ func LoadBuiltins() ([]*Template, error) {
 		}
 
 		name := e.Name()
-		srcDir := filepath.ToSlash(filepath.Join("templates", name))
+		srcDir := filepath.ToSlash(name)
 		dstDir := filepath.Join(tmpRoot, name)
 
 		if err := materializeEmbeddedDir(bfs, srcDir, dstDir); err != nil {

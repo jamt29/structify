@@ -1,4 +1,4 @@
-package structify
+package templates
 
 import "testing"
 
