@@ -57,8 +57,13 @@ func runNew(cmd *cobra.Command, args []string) error {
 
 	interactive := hasTTY() && !configIsNonInteractive()
 
-	// 3. Select template.
-	tpl, err := resolveTemplate(newTemplate, all, interactive)
+	if interactive {
+		eng := engine.New()
+		return tui.RunApp(all, eng)
+	}
+
+	// 3. Select template (flags-only / no TTY).
+	tpl, err := resolveTemplate(newTemplate, all, false)
 	if err != nil {
 		return err
 	}
@@ -74,38 +79,17 @@ func runNew(cmd *cobra.Command, args []string) error {
 		manifestInputs = tpl.Manifest.Inputs
 	}
 
-	if interactive {
-		typed, err := coerceProvidedVarsToTypes(manifestInputs, ctx)
-		if err != nil {
-			return err
-		}
-		ctx = typed
-
-		// Mixed mode: if any active required input is missing, fill via TUI.
-		if needsTUI(manifestInputs, ctx) {
-			ctx, err = tui.RunInputsWithInitial(manifestInputs, ctx)
-			if err != nil {
-				return err
-			}
-		} else {
-			ctx, err = finalizeContextNonInteractive(manifestInputs, ctx)
-			if err != nil {
-				return err
-			}
-		}
-	} else {
-		// No TTY => flags-only mode.
-		if strings.TrimSpace(newTemplate) == "" {
-			return fmt.Errorf("no TTY detected: --template is required")
-		}
-		ctx, err = coerceProvidedVarsToTypes(manifestInputs, ctx)
-		if err != nil {
-			return err
-		}
-		ctx, err = finalizeContextNonInteractive(manifestInputs, ctx)
-		if err != nil {
-			return err
-		}
+	// No TTY => flags-only mode.
+	if strings.TrimSpace(newTemplate) == "" {
+		return fmt.Errorf("no TTY detected: --template is required")
+	}
+	ctx, err = coerceProvidedVarsToTypes(manifestInputs, ctx)
+	if err != nil {
+		return err
+	}
+	ctx, err = finalizeContextNonInteractive(manifestInputs, ctx)
+	if err != nil {
+		return err
 	}
 
 	// Resolve nested interpolations inside string input values (e.g. module_path defaults).
@@ -143,17 +127,7 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return runDryRun(req, eng)
 	}
 
-	var res *template.ScaffoldResult
-	if interactive {
-		res, err = tui.RunProgress(req, eng)
-		if err != nil {
-			return err
-		}
-		tui.ShowSummary(res, req)
-		return nil
-	}
-
-	res, err = runNonInteractive(req)
+	res, err := runNonInteractive(req)
 	if err != nil {
 		return err
 	}
