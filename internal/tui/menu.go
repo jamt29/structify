@@ -39,6 +39,7 @@ type MenuModel struct {
 	items     []menuItem
 	cursor    int
 	selected  int
+	exitOnSelect bool
 	cancelled bool
 	width     int
 	height    int
@@ -53,6 +54,7 @@ func NewMenuModel() MenuModel {
 			{icon: "⚙", label: "Configuración", desc: "preferencias globales", action: actionConfig},
 		},
 		selected: -1,
+		exitOnSelect: true,
 		width:    100,
 		height:   30,
 	}
@@ -80,7 +82,10 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			m.selected = m.cursor
-			return m, tea.Quit
+			if m.exitOnSelect {
+				return m, tea.Quit
+			}
+			return m, nil
 		case "q", "ctrl+c":
 			m.cancelled = true
 			return m, tea.Quit

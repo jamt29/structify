@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 
 	templatecmd "github.com/jamt29/structify/cmd/template"
 	"github.com/jamt29/structify/internal/config"
@@ -17,11 +16,7 @@ var (
 	cfgFile string
 	verbose bool
 
-	runMenuFn         = tui.RunMenu
-	runAppFn          = tui.RunApp
-	resolveAllFn      = resolveAllTemplates
-	runTemplateListFn = runTemplateList
-	loadConfigFn      = config.Load
+	runRootFn = tui.Run
 )
 
 var rootCmd = &cobra.Command{
@@ -51,40 +46,14 @@ func init() {
 }
 
 func runInteractive() error {
-	action, err := runMenuFn()
+	// Asegura que el setup de config/dirs exista antes de renderizar.
+	_, _ = config.Load()
+
+	templates, err := resolveAllTemplates()
 	if err != nil {
-		if err == tui.ErrMenuExit {
-			return nil
-		}
 		return err
 	}
-
-	switch action {
-	case tui.ActionNew:
-		templates, err := resolveAllFn()
-		if err != nil {
-			return err
-		}
-		return runAppFn(templates, engine.New())
-	case tui.ActionTemplates:
-		return runTemplateListFn()
-	case tui.ActionGitHub:
-		fmt.Println("Usa: structify template add github.com/<user>/<repo>")
-		return nil
-	case tui.ActionConfig:
-		cfg, err := loadConfigFn()
-		if err != nil {
-			return err
-		}
-		if strings.TrimSpace(cfg.ConfigFile) == "" {
-			fmt.Printf("Config: %s\n", cfg.ConfigDir+"/config.yaml")
-			return nil
-		}
-		fmt.Printf("Config: %s\n", cfg.ConfigFile)
-		return nil
-	default:
-		return nil
-	}
+	return runRootFn(templates, engine.New())
 }
 
 func resolveAllTemplates() ([]*template.Template, error) {
@@ -93,25 +62,6 @@ func resolveAllTemplates() ([]*template.Template, error) {
 		return nil, fmt.Errorf("listing templates: %w", err)
 	}
 	return all, nil
-}
-
-func runTemplateList() error {
-	all, err := resolveAllFn()
-	if err != nil {
-		return err
-	}
-	if len(all) == 0 {
-		fmt.Println("No templates found.")
-		return nil
-	}
-	fmt.Println("Templates disponibles:")
-	for _, t := range all {
-		if t == nil || t.Manifest == nil {
-			continue
-		}
-		fmt.Printf("- %s (%s)\n", t.Manifest.Name, t.Source)
-	}
-	return nil
 }
 
 

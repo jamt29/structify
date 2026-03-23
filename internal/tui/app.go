@@ -50,6 +50,7 @@ type App struct {
 	answers   dsl.Context
 	result    *tmpl.ScaffoldResult
 	err       error
+	done      bool
 
 	selector    list.Model
 	inputs      []inputEntry
@@ -64,6 +65,10 @@ type App struct {
 	width  int
 	height int
 }
+
+// Done retorna true cuando el usuario presionó cualquier tecla en stateDone/stateError.
+// Se usa por RootModel para volver al menú sin salir del programa.
+func (a *App) Done() bool { return a.done }
 
 type msgFilesDone struct{ count int }
 type msgStepStart struct {
@@ -160,8 +165,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case stateProgress:
 		return a.updateProgress(msg)
 	case stateDone, stateError:
-		if _, ok := msg.(tea.KeyMsg); ok {
-			return a, tea.Quit
+		if k, ok := msg.(tea.KeyMsg); ok {
+			// Permite salir globalmente con Ctrl+C.
+			if k.String() == "ctrl+c" {
+				a.err = fmt.Errorf("cancelled")
+				return a, tea.Quit
+			}
+			a.done = true
 		}
 		return a, nil
 	default:
@@ -338,14 +348,17 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case msgStepError:
 		a.err = m.err
 		a.state = stateError
+		a.done = false
 		return a, nil
 	case msgScaffoldDone:
 		a.result = m.result
 		a.state = stateDone
+		a.done = false
 		return a, nil
 	case msgScaffoldError:
 		a.err = m.err
 		a.state = stateError
+		a.done = false
 		return a, nil
 	case msgProgressClosed:
 		return a, nil

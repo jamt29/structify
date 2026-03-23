@@ -84,3 +84,8 @@
 - **Contexto:** Al mover `structify` (sin subcomando) a TUI, en entornos sin `/dev/tty` el menú falla al abrir terminal interactiva y puede romper flujos de prueba.
 - **Lección:** Encapsular `RunMenu` detrás de función inyectable y manejar un error sentinel de salida (`ErrMenuExit`) para tener salida limpia y pruebas deterministas.
 - **Aplicar en:** `cmd/root.go`, `internal/tui/menu.go`, tests de comando raíz.
+
+### L019 — Evitar `tea.Quit` entre pantallas para prevenir flash AltScreen
+- **Contexto:** Si `RunMenu()` y `RunApp()` ejecutan `tea.WithAltScreen()` como programas separados, el terminal alterna modo y se ve un frame intermedio.
+- **Lección:** Mantener un único `tea.Program` (RootModel) y transicionar por `screen` interno. Para señalar fin de sub-flujos, usar `done`/`Done()` y no salir con `tea.Quit`.
+- **Aplicar en:** `internal/tui/root.go`, `internal/tui/app.go`, `internal/tui/menu.go`.
