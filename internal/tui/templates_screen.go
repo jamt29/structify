@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/template"
@@ -115,6 +114,12 @@ func (m *TemplatesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *TemplatesModel) View() string {
+	return m.ViewContent()
+}
+
+// ViewContent returns the raw (non-centered) content of this screen.
+// RootModel is responsible for applying any alignment/centering.
+func (m *TemplatesModel) ViewContent() string {
 	if m.width < 80 || m.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
@@ -127,7 +132,7 @@ func (m *TemplatesModel) View() string {
 	if len(m.items) == 0 {
 		b.WriteString(stylePending.Render("No templates found."))
 		b.WriteString("\n")
-		return centerContent(m.width, m.height, b.String())
+		return b.String()
 	}
 
 	// Render groups with headings.
@@ -180,8 +185,6 @@ func (m *TemplatesModel) View() string {
 	b.WriteString("\n")
 	b.WriteString(styleHelpBar.Render("enter ver detalle  n nuevo template  esc volver"))
 	b.WriteString("\n")
-
-	// Center the full view on the screen.
-	return centerContent(m.width, m.height, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, b.String()))
+	return b.String()
 }
 

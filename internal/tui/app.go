@@ -367,15 +367,21 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) View() string {
+	return a.ViewContent()
+}
+
+// ViewContent returns the raw (non-centered) content of this screen.
+// RootModel is responsible for centering.
+func (a *App) ViewContent() string {
 	if a.width < 80 || a.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
-	content := strings.Join([]string{
+
+	return strings.Join([]string{
 		a.renderHeader(),
 		a.renderBody(),
 		styleHelpBar.Render(" " + a.helpText()),
 	}, "\n")
-	return lipgloss.Place(a.width, a.height, lipgloss.Center, lipgloss.Center, content)
 }
 
 func (a *App) renderHeader() string {
@@ -547,8 +553,6 @@ func (a *App) renderDone() string {
 		block.WriteString(line + "\n")
 	}
 	b.WriteString(lipgloss.NewStyle().BorderLeft(true).BorderForeground(colorActive).PaddingLeft(1).Render(strings.TrimSpace(block.String())))
-	b.WriteString("\n\n")
-	b.WriteString(stylePending.Render("(presiona cualquier tecla para salir)"))
 	return b.String()
 }
 

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"testing"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jamt29/structify/internal/dsl"
@@ -143,7 +144,17 @@ func TestApp_RenderAndHelpers(t *testing.T) {
 			{Name: "Init go module", Command: "go mod init github.com/user/my-api"},
 		},
 	}
-	_ = app.renderDone()
+
+	doneBody := app.renderDone()
+	if strings.Contains(doneBody, "(presiona cualquier tecla para salir)") {
+		t.Fatalf("renderDone() must not include inline exit text")
+	}
+
+	view := app.ViewContent()
+	if got := strings.Count(view, "cualquier tecla para salir"); got != 1 {
+		t.Fatalf("expected exactly one helpText occurrence, got %d", got)
+	}
+
 	_ = app.View()
 	_ = prettyPath(app.outputDir())
 	_ = sortedContextPairs(app.answers)

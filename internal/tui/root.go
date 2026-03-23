@@ -88,41 +88,37 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Keep window sizing consistent across screens.
 	if ws, ok := msg.(tea.WindowSizeMsg); ok {
 		r.width, r.height = ws.Width, ws.Height
-		switch r.screen {
-		case screenMenu:
-			newMenu, cmd := r.menu.Update(msg)
-			r.menu = newMenu.(MenuModel)
-			return r, cmd
-		case screenNew:
-			if r.app != nil {
-				newApp, cmd := r.app.Update(msg)
-				r.app = newApp.(*App)
-				return r, cmd
-			}
-			return r, nil
-		case screenTemplates:
-			if r.templatesScreen != nil {
-				newM, cmd := r.templatesScreen.Update(msg)
-				r.templatesScreen = newM.(*TemplatesModel)
-				return r, cmd
-			}
-			return r, nil
-		case screenGitHub:
-			if r.githubScreen != nil {
-				newM, cmd := r.githubScreen.Update(msg)
-				r.githubScreen = newM.(*GitHubModel)
-				return r, cmd
-			}
-			return r, nil
-		case screenConfig:
-			if r.configScreen != nil {
-				newM, cmd := r.configScreen.Update(msg)
-				r.configScreen = newM.(*ConfigModel)
-				return r, cmd
-			}
-			return r, nil
+
+		var cmds []tea.Cmd
+
+		// Always update the menu model (it exists as a value).
+		newMenu, cmd := r.menu.Update(msg)
+		r.menu = newMenu.(MenuModel)
+		cmds = append(cmds, cmd)
+
+		// Update all active sub-models (non-nil pointers).
+		if r.app != nil {
+			newApp, cmd := r.app.Update(msg)
+			r.app = newApp.(*App)
+			cmds = append(cmds, cmd)
 		}
-		return r, nil
+		if r.templatesScreen != nil {
+			newM, cmd := r.templatesScreen.Update(msg)
+			r.templatesScreen = newM.(*TemplatesModel)
+			cmds = append(cmds, cmd)
+		}
+		if r.githubScreen != nil {
+			newM, cmd := r.githubScreen.Update(msg)
+			r.githubScreen = newM.(*GitHubModel)
+			cmds = append(cmds, cmd)
+		}
+		if r.configScreen != nil {
+			newM, cmd := r.configScreen.Update(msg)
+			r.configScreen = newM.(*ConfigModel)
+			cmds = append(cmds, cmd)
+		}
+
+		return r, tea.Batch(cmds...)
 	}
 
 	switch r.screen {
@@ -273,32 +269,60 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (r RootModel) View() string {
+	var content string
 	switch r.screen {
 	case screenMenu:
-		return r.menu.View()
+		content = r.menu.ViewContent()
 	case screenNew:
 		if r.app == nil {
 			return ""
 		}
-		return r.app.View()
+		content = r.app.ViewContent()
 	case screenTemplates:
 		if r.templatesScreen == nil {
 			return ""
 		}
-		return r.templatesScreen.View()
+		content = r.templatesScreen.ViewContent()
 	case screenGitHub:
 		if r.githubScreen == nil {
 			return ""
 		}
-		return r.githubScreen.View()
+		content = r.githubScreen.ViewContent()
 	case screenConfig:
 		if r.configScreen == nil {
 			return ""
 		}
-		return r.configScreen.View()
+		content = r.configScreen.ViewContent()
 	default:
 		return ""
 	}
+
+	// RootModel is the only place applying alignment/centering.
+	switch r.screen {
+	case screenMenu:
+		return centerContent(r.width, r.height, content)
+	case screenTemplates, screenNew:
+		// Default for these screens: horizontal-only.
+		switch r.screen {
+		case screenTemplates:
+			return centerContentHorizontal(r.width, content)
+		case screenNew:
+			if r.app == nil {
+				return centerContentHorizontal(r.width, content)
+			}
+			switch r.app.state {
+			case stateProgress:
+				return centerContentHorizontal(r.width, content)
+			case stateSelectTemplate, stateInputs, stateConfirm, stateDone, stateError:
+				return centerContent(r.width, r.height, content)
+			default:
+				return centerContentHorizontal(r.width, content)
+			}
+		}
+	}
+
+	// screenGitHub/screenConfig: center both.
+	return centerContent(r.width, r.height, content)
 }
 
 // Run lanza la sesión TUI completa (welcome + menú + sub-pantallas).

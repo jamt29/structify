@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type GitHubModel struct {
@@ -37,6 +36,10 @@ func (m *GitHubModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *GitHubModel) View() string {
+	return m.ViewContent()
+}
+
+func (m *GitHubModel) ViewContent() string {
 	if m.width < 80 || m.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
@@ -60,7 +63,6 @@ func (m *GitHubModel) View() string {
 		"",
 		styleActiveBox.Render(box),
 	}, "\n")
-
-	return centerContent(m.width, m.height, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, content))
+	return content
 }
 

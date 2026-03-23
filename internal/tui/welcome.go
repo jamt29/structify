@@ -21,8 +21,8 @@ func WelcomeView(width int) string {
 	content := strings.Join([]string{
 		art,
 		"",
-		lipgloss.PlaceHorizontal(width, lipgloss.Center, tagline),
-		lipgloss.PlaceHorizontal(width, lipgloss.Center, version),
+		tagline,
+		version,
 	}, "\n")
-	return lipgloss.PlaceHorizontal(width, lipgloss.Center, content)
+	return content
 }

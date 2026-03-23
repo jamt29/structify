@@ -60,6 +60,10 @@ func (m *ConfigModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *ConfigModel) View() string {
+	return m.ViewContent()
+}
+
+func (m *ConfigModel) ViewContent() string {
 	if m.width < 80 || m.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
@@ -94,8 +98,7 @@ func (m *ConfigModel) View() string {
 		"",
 		styleActiveBox.Render(box.String()),
 	}, "\n")
-
-	return centerContent(m.width, m.height, lipgloss.PlaceHorizontal(m.width, lipgloss.Center, content))
+	return content
 }
 
 func styleErrorText(msg string) string {
