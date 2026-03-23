@@ -18,6 +18,7 @@ const (
 	TOKEN_NOT    TokenType = "!"  // !
 	TOKEN_LPAREN TokenType = "("
 	TOKEN_RPAREN TokenType = ")"
+	TOKEN_COMMA  TokenType = ","
 
 	// Control
 	TOKEN_EOF     TokenType = "EOF"
@@ -82,6 +83,14 @@ type NotNode struct {
 
 func (n *NotNode) nodeType() string { return "Not" }
 
+// CallNode represents function calls like contains(features, "docker").
+type CallNode struct {
+	FuncName string
+	Args     []Node
+}
+
+func (n *CallNode) nodeType() string { return "Call" }
+
 // Context contains the runtime values for all variables referenced in expressions
 // and used during interpolation.
 type Context map[string]interface{}
@@ -96,6 +105,7 @@ type Manifest struct {
 	Description  string     `yaml:"description"`
 	Tags         []string   `yaml:"tags"`
 	Inputs       []Input    `yaml:"inputs"`
+	Computed     []Computed `yaml:"computed,omitempty"`
 	Files        []FileRule `yaml:"files"`
 	Steps        []Step     `yaml:"steps"`
 }
@@ -110,6 +120,12 @@ type Input struct {
 	Validate string   `yaml:"validate,omitempty"`
 	Options  []string `yaml:"options,omitempty"`
 	When     string   `yaml:"when,omitempty"`
+	MustExist bool    `yaml:"must_exist,omitempty"`
+}
+
+type Computed struct {
+	ID    string `yaml:"id"`
+	Value string `yaml:"value"`
 }
 
 // FileRule controls which files or directories are included or excluded.

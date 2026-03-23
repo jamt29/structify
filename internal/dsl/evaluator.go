@@ -2,6 +2,7 @@ package dsl
 
 import (
 	"fmt"
+	"strings"
 )
 
 func Evaluate(node Node, ctx Context) (bool, error) {
@@ -86,6 +87,8 @@ func evalBool(node Node, ctx Context) (bool, error) {
 			return false, fmt.Errorf("unsupported comparison type %s", lt)
 		}
 		return false, fmt.Errorf("unknown comparison operator %q", n.Operator)
+	case *CallNode:
+		return evalCallBool(n, ctx)
 	case *StringLiteralNode:
 		return false, fmt.Errorf("string literal is not a boolean expression")
 	default:
@@ -109,9 +112,17 @@ func evalValue(node Node, ctx Context) (any, string, error) {
 			return vv, "string", nil
 		case bool:
 			return vv, "bool", nil
+		case []string:
+			return vv, "multiselect", nil
 		default:
-			return nil, "", fmt.Errorf("variable '%s' is %T, expected string or bool", n.Name, v)
+			return nil, "", fmt.Errorf("variable '%s' is %T, expected string, bool, or []string", n.Name, v)
 		}
+	case *CallNode:
+		b, err := evalCallBool(n, ctx)
+		if err != nil {
+			return nil, "", err
+		}
+		return b, "bool", nil
 	default:
 		// For comparisons, logical operators, and not-nodes, require boolean evaluation.
 		b, err := evalBool(node, ctx)
@@ -119,5 +130,39 @@ func evalValue(node Node, ctx Context) (any, string, error) {
 			return nil, "", err
 		}
 		return b, "bool", nil
+	}
+}
+
+func evalCallBool(n *CallNode, ctx Context) (bool, error) {
+	if n.FuncName != "contains" {
+		return false, fmt.Errorf("unknown function %q", n.FuncName)
+	}
+	if len(n.Args) != 2 {
+		return false, fmt.Errorf("contains expects 2 args")
+	}
+	left, leftType, err := evalValue(n.Args[0], ctx)
+	if err != nil {
+		return false, err
+	}
+	right, rightType, err := evalValue(n.Args[1], ctx)
+	if err != nil {
+		return false, err
+	}
+	if rightType != "string" {
+		return false, fmt.Errorf("contains second arg must be string, got %s", rightType)
+	}
+	needle := right.(string)
+	switch leftType {
+	case "string":
+		return strings.Contains(left.(string), needle), nil
+	case "multiselect":
+		for _, item := range left.([]string) {
+			if item == needle {
+				return true, nil
+			}
+		}
+		return false, nil
+	default:
+		return false, fmt.Errorf("contains first arg must be string or []string, got %s", leftType)
 	}
 }

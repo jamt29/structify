@@ -20,6 +20,10 @@ func TestNodeTypeMethods_Smoke(t *testing.T) {
 		&NotNode{
 			Expr: &BoolLiteralNode{Value: true},
 		},
+		&CallNode{
+			FuncName: "contains",
+			Args:     []Node{&IdentNode{Name: "x"}, &StringLiteralNode{Value: "y"}},
+		},
 	}
 
 	for _, n := range nodes {

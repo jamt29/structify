@@ -12,6 +12,8 @@ func TestValidateManifest_Valid(t *testing.T) {
 		Inputs: []Input{
 			{ID: "project_name", Type: "string", Prompt: "p", Required: true},
 			{ID: "use_docker", Type: "bool", Prompt: "p"},
+			{ID: "features", Type: "multiselect", Prompt: "p", Options: []string{"a", "b"}},
+			{ID: "output_dir", Type: "path", Prompt: "p"},
 		},
 		Files: []FileRule{
 			{Include: "docker/**", When: `use_docker == true`},
@@ -51,6 +53,55 @@ func TestValidateManifest_MultipleErrors(t *testing.T) {
 	errs := ValidateManifest(m)
 	if len(errs) < 8 {
 		t.Fatalf("expected multiple errors, got %d: %#v", len(errs), errs)
+	}
+}
+
+func TestValidateManifest_ComputedDuplicateID(t *testing.T) {
+	m := &Manifest{
+		Name:     "t",
+		Version:  "1.0.0",
+		Language: "go",
+		Inputs: []Input{
+			{ID: "project_name", Type: "string"},
+		},
+		Computed: []Computed{
+			{ID: "project_name", Value: "x"},
+		},
+	}
+	errs := ValidateManifest(m)
+	if len(errs) == 0 {
+		t.Fatalf("expected duplicate id error")
+	}
+}
+
+func TestValidateManifest_MultiselectRequiresOptions(t *testing.T) {
+	m := &Manifest{
+		Name:     "t",
+		Version:  "1.0.0",
+		Language: "go",
+		Inputs: []Input{
+			{ID: "features", Type: "multiselect"},
+		},
+	}
+	errs := ValidateManifest(m)
+	if len(errs) == 0 {
+		t.Fatalf("expected validation error for missing options")
+	}
+}
+
+func TestValidateManifest_WhenContainsParses(t *testing.T) {
+	m := &Manifest{
+		Name:     "t",
+		Version:  "1.0.0",
+		Language: "go",
+		Inputs: []Input{
+			{ID: "features", Type: "multiselect", Options: []string{"docker"}},
+			{ID: "transport", Type: "string", When: `contains(features, "docker")`},
+		},
+	}
+	errs := ValidateManifest(m)
+	if len(errs) != 0 {
+		t.Fatalf("expected valid manifest, got: %#v", errs)
 	}
 }
 

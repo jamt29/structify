@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
@@ -27,7 +28,7 @@ func ShouldAskInput(input dsl.Input, ctx dsl.Context) (bool, error) {
 func ApplyDefault(input dsl.Input, ctx dsl.Context) (string, error) {
 	if input.Default == nil {
 		switch strings.ToLower(strings.TrimSpace(input.Type)) {
-		case "string", "enum":
+		case "string", "enum", "path", "multiselect":
 			return "", nil
 		case "bool":
 			return "false", nil
@@ -84,6 +85,32 @@ func ValidateInputValue(input dsl.Input, value string) error {
 			}
 		}
 		return fmt.Errorf("must be one of: %s", strings.Join(input.Options, ", "))
+	case "multiselect":
+		if v == "" {
+			return nil
+		}
+		allowed := map[string]struct{}{}
+		for _, opt := range input.Options {
+			allowed[opt] = struct{}{}
+		}
+		parts := strings.Split(v, ",")
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if _, ok := allowed[p]; !ok {
+				return fmt.Errorf("must be a comma-separated subset of: %s", strings.Join(input.Options, ", "))
+			}
+		}
+		return nil
+	case "path":
+		if input.MustExist {
+			if _, err := os.Stat(v); err != nil {
+				return fmt.Errorf("path must exist")
+			}
+		}
+		return nil
 
 	case "bool":
 		if _, ok := parseBoolString(v); ok {
@@ -101,8 +128,21 @@ func coerceInputValue(input dsl.Input, value string) (any, error) {
 	v := strings.TrimSpace(value)
 
 	switch typ {
-	case "string", "enum":
+	case "string", "enum", "path":
 		return v, nil
+	case "multiselect":
+		if v == "" {
+			return []string{}, nil
+		}
+		parts := strings.Split(v, ",")
+		out := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				out = append(out, p)
+			}
+		}
+		return out, nil
 	case "bool":
 		b, ok := parseBoolString(v)
 		if !ok {

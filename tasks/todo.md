@@ -80,4 +80,12 @@
 - [x] 8.4 — Documentación de comandos y DSL (`docs/commands.md`, `docs/dsl-reference.md`)
 - [x] 8.5 — Homebrew opcional (brews en `.goreleaser.yaml`)
 
+## V0.2.0 — Templates y DSL avanzado
+
+- [x] Feature 1 — `structify template import` (source local/GitHub + analyzer + generación + validación)
+- [x] Feature 2 — `structify template edit <name>` (editor sistema + validación + flujo de resolución)
+- [x] Feature 3 — DSL avanzado (`multiselect`, `path`, `computed`, `contains()`) + tests
+- [x] Verificación final (`go build ./...`, `go test ./...`, `go test ./... -cover`, DSL >= 87%)
+- [x] Reporte de cierre en `tasks/V020-RESULTADO.md`
+
 

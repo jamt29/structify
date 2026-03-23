@@ -1,205 +1,167 @@
-# V020-RESULTADO (Centrado global TUI + Built-ins compilables)
+# V020-RESULTADO — v0.2.0 Templates + DSL
 
-## 1) Causa raíz del centrado (qué estaba fallando)
+## 1) Feature 1 — `structify template import`
 
-En el TUI, el centrado no estaba centralizado en un único lugar:
+### Implementado
+- Nuevo comando: `structify template import <source> [--name] [--yes]`.
+- Soporta source local y GitHub URL.
+- Analyzer nuevo en `internal/template/analyzer.go`:
+  - Detección de lenguaje por archivos clave.
+  - Detección de variables sugeridas (`project_name`, `module_path`) con enfoque pragmático.
+  - Detección de includes/ignores por defaults.
+- Generación de template importado:
+  - Copia de archivos a `~/.structify/templates/<name>/template/`.
+  - Reemplazo de variables detectadas por `{{ variable_id }}`.
+  - Conversión a `.tmpl` solo cuando hubo reemplazos.
+  - `scaffold.yaml` generado con inputs detectados y steps base por lenguaje.
 
-- Cada sub-modelo hacía su propio “placement” (menú, `App`/inputs/confirm/progress/done, selector de templates, GitHub, Config). Eso hacía que las reglas de centrado fueran inconsistentes entre pantallas y estados.
-- `RootModel` no propagaba correctamente el `tea.WindowSizeMsg` a los modelos que quedaban “guardados” mientras se cambiaba de `screen`. Como consecuencia, al volver a una pantalla, su `width/height` internos podían quedar desactualizados respecto al tamaño real del terminal, causando desalineaciones (“pegado” arriba/izquierda o centrados parciales).
-- Bug adicional: el texto `"(presiona cualquier tecla para salir)"` aparecía duplicado en el flujo `stateDone` porque se imprimía **inline** dentro de `App.renderDone()` y además se mostraba también en la barra de ayuda inferior mediante `App.helpText()` + `styleHelpBar`.
-
-## 2) Solución aplicada (qué cambió)
-
-### Centrados
-
-- `internal/tui/root.go`: `RootModel.View()` quedó como ÚNICO responsable del alineado/centrado.
-  - `screenMenu` y estados `stateSelectTemplate/stateInputs/stateConfirm/stateDone/stateError` (en `screenNew`) usan centrado **H+V**.
-  - `stateProgress` (en `screenNew`) usa centrado **solo horizontal (H-only)**.
-  - `screenTemplates` usa centrado **solo horizontal**.
-  - `screenGitHub` y `screenConfig` usan centrado **H+V**.
-- `internal/tui/layout.go`: se añadió `centerContentHorizontal(width, content)` para el caso H-only.
-- Sub-modelos: ahora devuelven contenido “crudo” vía `ViewContent()` (sin `lipgloss.Place` ni `centerContent` propios):
-  - `internal/tui/menu.go`
-  - `internal/tui/app.go`
-  - `internal/tui/templates_screen.go`
-  - `internal/tui/github_screen.go`
-  - `internal/tui/config_screen.go`
-
-### Propagación de dimensiones
-
-- `internal/tui/root.go`: al recibir `tea.WindowSizeMsg`, ahora se actualizan todos los sub-modelos activos (acumulando `tea.Cmd` con `tea.Batch`), incluyendo `menu`, y los punteros no-nil: `app`, `templatesScreen`, `githubScreen`, `configScreen`.
-
-### Bug: “cualquier tecla para salir” duplicado
-
-- `internal/tui/app.go`: se eliminó `"(presiona cualquier tecla para salir)"` de `renderDone()`.
-- El texto queda **solo** en la barra de ayuda a través de `helpText()` + `styleHelpBar`.
-
-## 3) Descripción de pantallas después del fix
-
-Nota: no se capturaron screenshots (no había interacción visual disponible desde este entorno), pero el comportamiento está verificado por:
-1) `go test ./...` y asserts sobre duplicación del texto en `internal/tui/app_test.go`.
-2) La lógica de centrado/estado aplicada de forma determinística en `RootModel.View()`.
-
-### Pantalla 1 — Menú principal (`screenMenu`)
-- ASCII art + tagline/version + lista de opciones se renderizan como contenido crudo y `RootModel` aplica centrado **H+V**.
-- La tagline/version ya no se re-centran dentro de `WelcomeView` (se elimina el placement interno), evitando desalineación interna del bloque.
-- La barra de ayuda inferior se muestra solo una vez.
-
-### Pantalla 2 — Selector de templates (`screenTemplates`)
-- El contenido se centra **solo horizontalmente** (H-only). No se agrega “padding vertical” por centrado global, evitando inconsistencias cuando la lista crece.
-
-### Pantalla 3 — Inputs (`screenNew/stateInputs`)
-- `RootModel` aplica centrado **H+V** sobre el contenido (header/bloque de inputs).
-
-### Pantalla 4 — Confirmación (`screenNew/stateConfirm`)
-- `RootModel` aplica centrado **H+V** sobre el resumen y la caja de variables.
-
-### Pantalla 5 — Done/resultado (`screenNew/stateDone`)
-- `RootModel` aplica centrado **H+V**.
-- Se elimina la duplicación: `"(presiona cualquier tecla para salir)"` ya no aparece dentro del body; el texto aparece solo en la barra de ayuda inferior.
-
-Además:
-- `stateProgress`: centrado **H-only**, evitando salto/“jump” vertical a medida que crece el contenido.
-
-## 4) Diagnóstico de templates (built-ins) — errores exactos
-
-Ejecuté los built-ins en `/tmp` con el binario `./bin/structify` y luego compilé/checqué como en la solicitud. Resultado: **no hubo errores de compilación** en los comandos verificados (exit 0).
-
-### clean-architecture-go
-
-Comando `structify new`:
-```
-./bin/structify new --template clean-architecture-go --name testapp --var module_path=github.com/test/testapp --var transport=http --var orm=none --output /tmp/test-clean-go
+### Verificación real (import local)
+Comando:
+```bash
+./bin/structify template import /tmp/test-import --name imported-test --yes
 ```
 Salida:
+```text
+✓ Template 'imported-test' creado en /home/develop/.structify/templates/imported-test/
+Archivos: 2 incluidos, 0 ignorados
+Variables: project_name, module_path
+Inputs: 2 detectados
+Para usarlo:
+structify new --template imported-test
+Para editarlo:
+structify template edit imported-test
 ```
-  → Creating project...
-  ✓ go mod init
-  ─ install gRPC deps (skipped)
-  ─ install gorm deps (skipped)
-  ─ install sqlx deps (skipped)
-  ✓ go mod tidy
-  ✓ Created 11 files
-```
-`go build ./...`:
-- Archivo de log sin salida (`/tmp/structify_diag_clean_go_build.txt` quedó vacío) y exit 0.
 
-### vertical-slice-go
-
-Comando `structify new`:
+Validación y uso:
+```bash
+./bin/structify template validate ~/.structify/templates/imported-test/
+./bin/structify new --template imported-test --name myapp --dry-run
 ```
-./bin/structify new --template vertical-slice-go --name testapp --output /tmp/test-vslice-go
+Resultado:
+```text
+✓ Template is valid
+Inputs: 2, Steps: 2, File rules: 0
+...
+Files that would be created:
+go.mod
+main.go
+Steps that would run:
+✓ go mod init github.com/test/test-import
+✓ go mod tidy
+```
+
+### Verificación real (import GitHub)
+Comando:
+```bash
+./bin/structify template import github.com/jamt29/structify --name structify-template --yes
 ```
 Salida:
+```text
+✓ Template 'structify-template' creado en /home/develop/.structify/templates/structify-template/
+Archivos: 170 incluidos, 1 ignorados
+Variables: module_path
+Inputs: 1 detectados
+Para usarlo:
+structify new --template structify-template
+Para editarlo:
+structify template edit structify-template
 ```
-  → Creating project...
-  ✓ go mod init
-  ✓ go mod tidy
-  ✓ Created 8 files
-```
-`go build ./...`:
-- Archivo de log sin salida (`/tmp/structify_diag_vslice_go_build.txt` quedó vacío) y exit 0.
 
-### clean-architecture-ts
+## 2) Feature 2 — `structify template edit <name>`
 
-Comando `structify new`:
-```
-./bin/structify new --template clean-architecture-ts --name testapp --var runtime=express --var use_prisma=false --output /tmp/test-clean-ts
+### Implementado
+- Nuevo comando: `structify template edit <name>`.
+- Abre `scaffold.yaml` con `$EDITOR` y fallback `vim`/`nano`/`vi`.
+- Al salir del editor:
+  - `dsl.LoadManifest`
+  - `dsl.ValidateManifest`
+- Si hay errores: flujo con opciones:
+  1. Volver a editar
+  2. Guardar de todas formas
+  3. Descartar cambios
+
+### Verificación real (scaffold válido)
+Comando:
+```bash
+EDITOR=true ./bin/structify template edit imported-test
 ```
 Salida:
-```
-  → Creating project...
-  ✓ npm init
-  ✓ install runtime
-  ✓ install dev deps
-  ─ install prisma (skipped)
-  ✓ Created 11 files
-```
-`npm install && npx tsc --noEmit`:
-Salida (no hubo errores de tsc; el log contiene solo el audit de npm):
-```
-up to date, audited 69 packages in 1s
-
-22 packages are looking for funding
-  run `npm fund` for details
-
-found 0 vulnerabilities
+```text
+✓ scaffold.yaml actualizado y válido
 ```
 
-### vertical-slice-ts
-
-Comando `structify new`:
-```
-./bin/structify new --template vertical-slice-ts --name testapp --var runtime=express --output /tmp/test-vslice-ts
-```
+### Verificación real (scaffold inválido)
+Se forzó un `scaffold.yaml` inválido y se ejecutó `template edit`.
 Salida:
-```
-  → Creating project...
-  ✓ install runtime
-  ✓ install dev deps
-  ✓ Created 7 files
-```
-`npm install && npx tsc --noEmit`:
-Salida (sin errores de tsc; solo audit npm):
-```
-up to date, audited 69 packages in 1s
+```text
+El scaffold.yaml tiene errores:
+· name: name is required
+· version: version is required
+· language: language is required
 
-22 packages are looking for funding
-  run `npm fund` for details
-
-found 0 vulnerabilities
+¿Qué deseas hacer?
+1) Volver a editar
+2) Guardar de todas formas (no recomendado)
+3) Descartar cambios
+> Cambios descartados
 ```
 
-### clean-architecture-rust
+## 3) Feature 3 — Variables avanzadas del DSL
 
-Comando `structify new`:
-```
-./bin/structify new --template clean-architecture-rust --name testapp --var transport=axum --output /tmp/test-clean-rust
-```
-Salida:
-```
-  → Creating project...
-  ✓ cargo build
-  ✓ Created 7 files
-```
-`cargo check`:
-```
-    Checking testapp v0.1.0 (/tmp/test-clean-rust)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.07s
-```
+### Implementado
+- Nuevos tipos de input:
+  - `multiselect`
+  - `path` (con `must_exist`)
+- Variables calculadas:
+  - `computed` agregado al `Manifest`.
+  - Resolución aplicada en `cmd/new.go` antes del uso final del contexto.
+- Expresiones `when:` extendidas con `contains(...)`:
+  - Lexer: token `,`.
+  - Parser: `CallNode` y parseo de función.
+  - Evaluator: `contains(string,string)` y `contains([]string,string)`.
+- TUI:
+  - Soporte para prompt de `multiselect` con `space` para toggle y `enter` para confirmar.
 
-## 5) Correcciones aplicadas por template (diff de `.tmpl`)
+### Casos de test nuevos (`contains`)
+Incluidos en `internal/dsl/evaluator_test.go`:
+- `contains(features, "docker")` con `features=["logging","docker"]` => `true`
+- `contains(features, "auth")` con `features=["logging","docker"]` => `false`
+- `contains(features, "docker") && transport == "http"` => `true`
 
-No se realizaron correcciones sobre `templates/<builtin>/...`:
-- Los comandos verificados retornaron exit 0.
-- No se requirió modificar ningún `.tmpl` para que compile/checqué.
-
-## 6) Verificación de compilación — outputs por template (re-run)
-
-Repetí la verificación por template y se mantuvo el resultado (exit 0). Resumen:
-- `go build ./...` en `/tmp/test-clean-go` y `/tmp/test-vslice-go`: sin salida (logs vacíos).
-- `npm install && npx tsc --noEmit` en `/tmp/test-clean-ts` y `/tmp/test-vslice-ts`: sin errores de tsc (solo audit npm).
-- `cargo check` en `/tmp/test-clean-rust`: `Finished dev profile ...`.
-
-## 7) Cobertura — `go test ./... -cover` (output exacto)
-
-Salida:
+### Resultado de tests del evaluator
+Comando:
+```bash
+go test ./internal/dsl/... -v -run TestEvaluate
 ```
-ok  	github.com/jamt29/structify	0.020s	coverage: 0.0% of statements
-ok  	github.com/jamt29/structify/cmd	0.059s	coverage: 69.4% of statements
-ok  	github.com/jamt29/structify/cmd/structify	0.020s	coverage: 100.0% of statements
-ok  	github.com/jamt29/structify/cmd/template	0.036s	coverage: 62.3% of statements
-ok  	github.com/jamt29/structify/internal/config	(cached)	coverage: 81.8% of statements
-ok  	github.com/jamt29/structify/internal/dsl	(cached)	coverage: 87.7% of statements
-ok  	github.com/jamt29/structify/internal/engine	(cached)	coverage: 74.1% of statements
-ok  	github.com/jamt29/structify/internal/template	(cached)	coverage: 73.7% of statements
-ok  	github.com/jamt29/structify/internal/tui	0.017s	coverage: 33.7% of statements
-ok  	github.com/jamt29/structify/templates	(cached)	coverage: 100.0% of statements
+Resultado: todos los casos pasaron (`PASS`).
+
+## 4) Cobertura
+
+Comando:
+```bash
+go test ./... -cover
+```
+Salida relevante:
+```text
+ok  	github.com/jamt29/structify/internal/dsl	coverage: 87.2% of statements
 ```
 
-## 8) Lecciones capturadas
+Estado: cobertura DSL >= 87% cumplida.
 
-- El centrado en un TUI mult-pantalla debe ser un “contrato” único (en este caso `RootModel.View()`), no una responsabilidad distribuida en cada sub-modelo.
-- Si varias pantallas comparten un mismo `tea.Program`, `WindowSizeMsg` debe propagarse a todos los modelos activos para evitar estados con `width/height` obsoletos.
-- Evitar duplicaciones de UI: si una frase es “barra de ayuda”, no debe imprimirse también inline en el body (especialmente en `stateDone`/`stateError`).
+## 5) Estado final
 
+Comandos:
+```bash
+go build ./...
+go test ./...
+```
+
+Resultado:
+- `go build ./...` => OK
+- `go test ./...` => OK
+
+## 6) Lecciones capturadas
+
+Se añadieron lecciones en `tasks/lessons.md`:
+- `L020` — Asegurar tests dirigidos para mantener cobertura DSL al agregar features.
+- `L021` — Analyzer de import debe basarse en señales estructurales para reducir falsos positivos.

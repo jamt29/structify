@@ -78,6 +78,18 @@ func RunInputsWithInitial(inputs []dsl.Input, initial dsl.Context) (dsl.Context,
 				return nil, err
 			}
 			val = b
+		case "path":
+			s, err := promptString(label, in)
+			if err != nil {
+				return nil, err
+			}
+			val = s
+		case "multiselect":
+			s, err := promptMultiSelect(label, in)
+			if err != nil {
+				return nil, err
+			}
+			val = s
 		default:
 			return nil, fmt.Errorf("unsupported input type %q for %q", in.Type, id)
 		}
@@ -306,6 +318,99 @@ func promptBool(label string, in dsl.Input) (bool, error) {
 		return v, nil
 	}
 	return false, fmt.Errorf("expected y/n (or true/false)")
+}
+
+type multiPromptModel struct {
+	options  []string
+	selected map[int]bool
+	cursor   int
+	label    string
+	done     bool
+	value    string
+}
+
+func (m multiPromptModel) Init() tea.Cmd { return nil }
+
+func (m multiPromptModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if k, ok := msg.(tea.KeyMsg); ok {
+		switch k.String() {
+		case "ctrl+c", "esc":
+			return m, tea.Quit
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(m.options)-1 {
+				m.cursor++
+			}
+		case " ":
+			m.selected[m.cursor] = !m.selected[m.cursor]
+		case "enter":
+			picked := []string{}
+			for i, opt := range m.options {
+				if m.selected[i] {
+					picked = append(picked, opt)
+				}
+			}
+			m.value = strings.Join(picked, ",")
+			m.done = true
+			return m, tea.Quit
+		}
+	}
+	return m, nil
+}
+
+func (m multiPromptModel) View() string {
+	if m.done {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(lipgloss.NewStyle().Bold(true).Render(m.label))
+	b.WriteString("\n")
+	for i, opt := range m.options {
+		cursor := " "
+		if i == m.cursor {
+			cursor = ">"
+		}
+		check := "[ ]"
+		if m.selected[i] {
+			check = "[x]"
+		}
+		b.WriteString(fmt.Sprintf("%s %s %s\n", cursor, check, opt))
+	}
+	b.WriteString("\n(space toggle, enter confirmar, esc cancelar)")
+	return b.String()
+}
+
+func promptMultiSelect(label string, in dsl.Input) (string, error) {
+	if len(in.Options) == 0 {
+		return "", fmt.Errorf("multiselect %q has no options", in.ID)
+	}
+	m := multiPromptModel{
+		label:    label,
+		options:  append([]string{}, in.Options...),
+		selected: map[int]bool{},
+	}
+	if def, ok := in.Default.([]any); ok {
+		set := map[string]struct{}{}
+		for _, v := range def {
+			set[fmt.Sprint(v)] = struct{}{}
+		}
+		for i, opt := range m.options {
+			_, m.selected[i] = set[opt]
+		}
+	}
+	p := tea.NewProgram(m)
+	final, err := p.Run()
+	if err != nil {
+		return "", fmt.Errorf("prompting %q: %w", in.ID, err)
+	}
+	fm, ok := final.(multiPromptModel)
+	if !ok || !fm.done {
+		return "", fmt.Errorf("input cancelled")
+	}
+	return fm.value, nil
 }
 
 func parseBoolString(s string) (bool, bool) {

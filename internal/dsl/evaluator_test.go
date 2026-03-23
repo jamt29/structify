@@ -23,11 +23,19 @@ func TestEvaluate_TableFromSpecAndErrors(t *testing.T) {
 		{name: "and_false", expr: `a == "x" && b == "y"`, ctx: Context{"a": "x", "b": "z"}, want: false},
 		{name: "or_true", expr: `a == "x" || b == "y"`, ctx: Context{"a": "z", "b": "y"}, want: true},
 		{name: "grouped_complex", expr: `(a == "x" || b == "y") && c != "z"`, ctx: Context{"a": "z", "b": "y", "c": "q"}, want: true},
+		{name: "contains_multiselect_true", expr: `contains(features, "docker")`, ctx: Context{"features": []string{"logging", "docker"}}, want: true},
+		{name: "contains_multiselect_false", expr: `contains(features, "auth")`, ctx: Context{"features": []string{"logging", "docker"}}, want: false},
+		{name: "contains_and_compare_true", expr: `contains(features, "docker") && transport == "http"`, ctx: Context{"features": []string{"logging", "docker"}, "transport": "http"}, want: true},
+		{name: "contains_string_true", expr: `contains(module_path, "github.com")`, ctx: Context{"module_path": "github.com/acme/app"}, want: true},
+		{name: "contains_string_false", expr: `contains(module_path, "gitlab.com")`, ctx: Context{"module_path": "github.com/acme/app"}, want: false},
 
 		// Errors
 		{name: "invalid_operator_equals", expr: `transport = "http"`, ctx: Context{}, wantErr: true, errSubstr: "invalid operator '='"},
 		{name: "undeclared_variable", expr: `undeclared == "x"`, ctx: Context{}, wantErr: true, errSubstr: "variable 'undeclared' not defined in context"},
 		{name: "type_mismatch_compare", expr: `use_docker == "true"`, ctx: Context{"use_docker": true}, wantErr: true, errSubstr: "cannot compare bool with string"},
+		{name: "contains_wrong_second_arg", expr: `contains(module_path, use_docker)`, ctx: Context{"module_path": "abc", "use_docker": true}, wantErr: true, errSubstr: "second arg must be string"},
+		{name: "contains_wrong_first_arg", expr: `contains(use_docker, "x")`, ctx: Context{"use_docker": true}, wantErr: true, errSubstr: "first arg must be string or []string"},
+		{name: "contains_unknown_function", expr: `starts_with(module_path, "gh")`, ctx: Context{"module_path": "github.com/acme/app"}, wantErr: true, errSubstr: "unknown function"},
 	}
 
 	for _, tt := range tests {

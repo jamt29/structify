@@ -89,3 +89,13 @@
 - **Contexto:** Si `RunMenu()` y `RunApp()` ejecutan `tea.WithAltScreen()` como programas separados, el terminal alterna modo y se ve un frame intermedio.
 - **Lección:** Mantener un único `tea.Program` (RootModel) y transicionar por `screen` interno. Para señalar fin de sub-flujos, usar `done`/`Done()` y no salir con `tea.Quit`.
 - **Aplicar en:** `internal/tui/root.go`, `internal/tui/app.go`, `internal/tui/menu.go`.
+
+### L020 — Features de DSL deben venir con tests dirigidos a cobertura
+- **Contexto:** Al extender el DSL con `contains()` y nuevos tipos, la cobertura de `internal/dsl` cayó por debajo del umbral mínimo.
+- **Lección:** Cada rama nueva del evaluator/parser/validator debe tener tests explícitos (incluyendo errores y ramas internas) antes de cerrar la feature.
+- **Aplicar en:** `internal/dsl/evaluator_test.go`, `internal/dsl/parser_test.go`, `internal/dsl/validator_test.go`, `internal/dsl/*_internal_test.go`.
+
+### L021 — Analyzer de import debe priorizar señales estructurales
+- **Contexto:** Buscar nombre de proyecto sin restricciones genera falsos positivos cuando el nombre es muy genérico.
+- **Lección:** Detectar variables sugeridas solo en contextos estructurales (module/import/name de manifests) y no en texto libre/comentarios.
+- **Aplicar en:** `internal/template/analyzer.go`, futuros detectores automáticos de variables.

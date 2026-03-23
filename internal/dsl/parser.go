@@ -118,6 +118,9 @@ func (p *Parser) parsePrimary() (Node, error) {
 
 	switch tok.Type {
 	case TOKEN_IDENT:
+		if p.peek.Type == TOKEN_LPAREN {
+			return p.parseCall()
+		}
 		p.nextToken()
 		return &IdentNode{Name: tok.Literal}, nil
 	case TOKEN_STRING:
@@ -150,6 +153,40 @@ func (p *Parser) parsePrimary() (Node, error) {
 	default:
 		return nil, p.errf(tok, "expected string, boolean, identifier, or '(', got %q", tok.Literal)
 	}
+}
+
+func (p *Parser) parseCall() (Node, error) {
+	name := p.cur.Literal
+	p.nextToken() // now on '('
+	if p.cur.Type != TOKEN_LPAREN {
+		return nil, p.errf(p.cur, "expected '(' after function name")
+	}
+	p.nextToken() // first arg or ')'
+
+	args := []Node{}
+	if p.cur.Type == TOKEN_RPAREN {
+		p.nextToken()
+		return &CallNode{FuncName: name, Args: args}, nil
+	}
+
+	for {
+		arg, err := p.parsePrimary()
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, arg)
+
+		if p.cur.Type == TOKEN_COMMA {
+			p.nextToken()
+			continue
+		}
+		if p.cur.Type != TOKEN_RPAREN {
+			return nil, p.errf(p.cur, "expected ',' or ')', got %q", p.cur.Literal)
+		}
+		p.nextToken()
+		break
+	}
+	return &CallNode{FuncName: name, Args: args}, nil
 }
 
 func (p *Parser) errf(tok Token, format string, args ...any) error {

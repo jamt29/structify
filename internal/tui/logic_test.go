@@ -156,6 +156,26 @@ func TestValidateInputValue(t *testing.T) {
 			value:   "anything",
 			wantErr: false,
 		},
+		{
+			name: "path must exist",
+			input: dsl.Input{
+				ID:        "output_dir",
+				Type:      "path",
+				MustExist: true,
+			},
+			value:   "/definitely/non-existent-path-structify",
+			wantErr: true,
+		},
+		{
+			name: "multiselect valid",
+			input: dsl.Input{
+				ID:      "features",
+				Type:    "multiselect",
+				Options: []string{"auth", "docker"},
+			},
+			value:   "auth,docker",
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

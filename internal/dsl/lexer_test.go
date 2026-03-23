@@ -48,6 +48,19 @@ func TestLexer_NextToken_BasicTokens(t *testing.T) {
 			},
 		},
 		{
+			name:  "function_call_tokens",
+			input: `contains(features, "docker")`,
+			want: []Token{
+				{Type: TOKEN_IDENT, Literal: "contains"},
+				{Type: TOKEN_LPAREN, Literal: "("},
+				{Type: TOKEN_IDENT, Literal: "features"},
+				{Type: TOKEN_COMMA, Literal: ","},
+				{Type: TOKEN_STRING, Literal: "docker"},
+				{Type: TOKEN_RPAREN, Literal: ")"},
+				{Type: TOKEN_EOF, Literal: ""},
+			},
+		},
+		{
 			name:  "illegal_single_quote",
 			input: `transport == 'http'`,
 			want: []Token{

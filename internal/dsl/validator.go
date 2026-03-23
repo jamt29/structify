@@ -60,18 +60,43 @@ func ValidateManifest(m *Manifest) []ValidationError {
 		t := trim(in.Type)
 		if t == "" {
 			errs = append(errs, ValidationError{Field: fieldPrefix + ".type", Message: "type is required"})
-		} else if t != "string" && t != "enum" && t != "bool" {
+		} else if t != "string" && t != "enum" && t != "bool" && t != "multiselect" && t != "path" {
 			errs = append(errs, ValidationError{Field: fieldPrefix + ".type", Message: fmt.Sprintf("unsupported input type %q", t)})
 		}
 
 		if t == "enum" && len(in.Options) == 0 {
 			errs = append(errs, ValidationError{Field: fieldPrefix + ".options", Message: "options is required when type is enum"})
 		}
+		if t == "multiselect" && len(in.Options) == 0 {
+			errs = append(errs, ValidationError{Field: fieldPrefix + ".options", Message: "options is required when type is multiselect"})
+		}
 
 		if trim(in.When) != "" {
 			if _, err := NewParser(in.When).Parse(); err != nil {
 				errs = append(errs, ValidationError{Field: fieldPrefix + ".when", Message: err.Error()})
 			}
+		}
+	}
+
+	// Computed variables.
+	for i := range m.Computed {
+		c := m.Computed[i]
+		fieldPrefix := fmt.Sprintf("computed[%d]", i)
+		if trim(c.ID) == "" {
+			errs = append(errs, ValidationError{Field: fieldPrefix + ".id", Message: "id is required"})
+			continue
+		}
+		if !inputIDRe.MatchString(c.ID) {
+			errs = append(errs, ValidationError{Field: fieldPrefix + ".id", Message: "id must match ^[a-z_]+$"})
+		}
+		if prev, ok := ids[c.ID]; ok {
+			errs = append(errs, ValidationError{
+				Field:   fieldPrefix + ".id",
+				Message: fmt.Sprintf("duplicate id %q (also defined at inputs[%d].id)", c.ID, prev),
+			})
+		}
+		if trim(c.Value) == "" {
+			errs = append(errs, ValidationError{Field: fieldPrefix + ".value", Message: "value is required"})
 		}
 	}
 
@@ -226,5 +251,9 @@ func collectIdents(n Node, out map[string]struct{}) {
 		collectIdents(t.Right, out)
 	case *NotNode:
 		collectIdents(t.Expr, out)
+	case *CallNode:
+		for _, a := range t.Args {
+			collectIdents(a, out)
+		}
 	}
 }

@@ -32,6 +32,9 @@ func (l *Lexer) NextToken() Token {
 	case ')':
 		l.readChar()
 		return Token{Type: TOKEN_RPAREN, Literal: ")", Pos: startPos}
+	case ',':
+		l.readChar()
+		return Token{Type: TOKEN_COMMA, Literal: ",", Pos: startPos}
 	case '!':
 		if l.peekChar() == '=' {
 			l.readChar()

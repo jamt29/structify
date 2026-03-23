@@ -91,6 +91,11 @@ func runNew(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if tpl != nil && tpl.Manifest != nil {
+		if err := applyComputedValues(tpl.Manifest.Computed, ctx); err != nil {
+			return err
+		}
+	}
 
 	// Resolve nested interpolations inside string input values (e.g. module_path defaults).
 	if err := resolveContextInterpolations(ctx); err != nil {
@@ -248,8 +253,18 @@ func coerceProvidedVarsToTypes(inputs []dsl.Input, ctx dsl.Context) (dsl.Context
 					return nil, fmt.Errorf("invalid bool for %q: %q", k, s)
 				}
 				out[k] = b
-			case "string", "enum":
+			case "string", "enum", "path":
 				out[k] = s
+			case "multiselect":
+				parts := strings.Split(s, ",")
+				values := make([]string, 0, len(parts))
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						values = append(values, p)
+					}
+				}
+				out[k] = values
 			}
 		}
 	}
@@ -314,7 +329,7 @@ func evalWhen(expr string, ctx dsl.Context) (bool, error) {
 
 func defaultOrZero(in dsl.Input) any {
 	switch strings.ToLower(strings.TrimSpace(in.Type)) {
-	case "string", "enum":
+	case "string", "enum", "path":
 		if in.Default == nil {
 			return ""
 		}
@@ -334,6 +349,32 @@ func defaultOrZero(in dsl.Input) any {
 			return v
 		}
 		return false
+	case "multiselect":
+		if in.Default == nil {
+			return []string{}
+		}
+		if arr, ok := in.Default.([]any); ok {
+			out := make([]string, 0, len(arr))
+			for _, v := range arr {
+				out = append(out, fmt.Sprint(v))
+			}
+			return out
+		}
+		if s, ok := in.Default.(string); ok {
+			if strings.TrimSpace(s) == "" {
+				return []string{}
+			}
+			parts := strings.Split(s, ",")
+			out := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					out = append(out, p)
+				}
+			}
+			return out
+		}
+		return []string{}
 	default:
 		return nil
 	}
@@ -368,6 +409,21 @@ func resolveContextInterpolations(ctx dsl.Context) error {
 			return fmt.Errorf("input %q: %w", k, err)
 		}
 		ctx[k] = resolved
+	}
+	return nil
+}
+
+func applyComputedValues(computed []dsl.Computed, ctx dsl.Context) error {
+	for _, c := range computed {
+		id := strings.TrimSpace(c.ID)
+		if id == "" {
+			continue
+		}
+		value, err := dsl.Interpolate(c.Value, ctx)
+		if err != nil {
+			return fmt.Errorf("computing %q: %w", id, err)
+		}
+		ctx[id] = value
 	}
 	return nil
 }

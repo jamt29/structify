@@ -37,6 +37,11 @@ func TestParser_Parse_ValidExpressions(t *testing.T) {
 			input: `!use_docker == true`,
 			want:  `(! (== use_docker true))`,
 		},
+		{
+			name:  "contains_call",
+			input: `contains(features, "docker") && transport == "http"`,
+			want:  `(&& (call contains features "docker") (== transport "http"))`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -79,6 +84,11 @@ func TestParser_Parse_Errors(t *testing.T) {
 			input:       `transport == 'http'`,
 			wantSubstrs: []string{"parse error at position", "single quotes are not supported"},
 		},
+		{
+			name:        "call_missing_comma",
+			input:       `contains(features "docker")`,
+			wantSubstrs: []string{"parse error at position", "expected ',' or ')'"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -113,6 +123,12 @@ func nodeString(n Node) string {
 		return "(" + t.Operator + " " + nodeString(t.Left) + " " + nodeString(t.Right) + ")"
 	case *BinaryNode:
 		return "(" + t.Operator + " " + nodeString(t.Left) + " " + nodeString(t.Right) + ")"
+	case *CallNode:
+		args := []string{}
+		for _, a := range t.Args {
+			args = append(args, nodeString(a))
+		}
+		return "(call " + t.FuncName + " " + strings.Join(args, " ") + ")"
 	default:
 		return "<unknown>"
 	}
