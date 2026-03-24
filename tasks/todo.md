@@ -88,4 +88,11 @@
 - [x] Verificación final (`go build ./...`, `go test ./...`, `go test ./... -cover`, DSL >= 87%)
 - [x] Reporte de cierre en `tasks/V020-RESULTADO.md`
 
+## V0.3.0a — Preview + Huh
+
+- [x] Feature 1 — Preview del árbol en tiempo real (engine `PreviewFiles`, renderer `RenderTree`, split en `stateInputs`, preview en `stateConfirm`)
+- [x] Feature 2 — Reemplazo de inputs con Huh (`BuildHuhForm`, integración embebida en `App`, `when:` condicional con `WithHideFunc`, tema visual)
+- [x] Verificación final (`go build ./...`, `go test ./... -cover`)
+- [x] Reporte de cierre en `tasks/V030a-RESULTADO.md`
+
 

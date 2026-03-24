@@ -6,10 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jamt29/structify/internal/dsl"
@@ -56,6 +57,10 @@ type App struct {
 	inputs      []inputEntry
 	activeInput int
 	compactForm bool
+	huhForm     *huh.Form
+	huhString   map[string]string
+	huhBool     map[string]bool
+	huhMulti    map[string][]string
 
 	spin        spinner.Model
 	progressLog []progressLine
@@ -137,18 +142,34 @@ func newApp(templates []*tmpl.Template, eng *engine.Engine) (*App, error) {
 		compactForm: true,
 		spin:        spin,
 		engine:      eng,
-		width:       100,
-		height:      30,
+		width:       80,
+		height:      24,
 	}, nil
 }
 
-func (a *App) Init() tea.Cmd { return nil }
+func (a *App) Init() tea.Cmd {
+	if a.state == stateInputs && a.huhForm != nil {
+		return a.huhForm.Init()
+	}
+	return nil
+}
 
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m := msg.(type) {
 	case tea.WindowSizeMsg:
 		a.width, a.height = m.Width, m.Height
 		a.resizeComponents()
+		// Huh debe recibir WindowSizeMsg: si no, grupos/campos pueden quedar en ancho 0
+		// y el primer input no acepta escritura (parece sin foco).
+		if a.state == stateInputs && a.huhForm != nil {
+			a.applyHuhFormWidth()
+			updated, cmd := a.huhForm.Update(m)
+			if f, ok := updated.(*huh.Form); ok {
+				a.huhForm = f
+			}
+			a.syncFromHuhForm()
+			return a, cmd
+		}
 		return a, nil
 	case msgProgressReady:
 		a.progressCh = m.ch
@@ -193,7 +214,7 @@ func (a *App) updateSelect(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.selected = it.t
 			a.prepareInputs()
 			a.state = stateInputs
-			return a, nil
+			return a, a.enterStateInputs()
 		}
 	}
 	var cmd tea.Cmd
@@ -210,93 +231,116 @@ func (a *App) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			a.state = stateSelectTemplate
 			return a, nil
-		case "tab":
-			if len(a.inputs) > 0 {
-				a.activeInput = (a.activeInput + 1) % len(a.inputs)
-				return a, nil
-			}
-		case "shift+tab":
-			if len(a.inputs) > 0 {
-				a.activeInput--
-				if a.activeInput < 0 {
-					a.activeInput = len(a.inputs) - 1
-				}
-				return a, nil
-			}
-		case "left":
-			if e := a.currentInput(); e != nil && e.kind == "bool" {
-				e.boolVal = false
-				a.inputs[a.activeInput] = *e
-				return a, nil
-			}
-		case "right":
-			if e := a.currentInput(); e != nil && e.kind == "bool" {
-				e.boolVal = true
-				a.inputs[a.activeInput] = *e
-				return a, nil
-			}
-		case "y":
-			if e := a.currentInput(); e != nil && e.kind == "bool" {
-				e.boolVal = true
-				a.inputs[a.activeInput] = *e
-				return a, nil
-			}
-		case "n":
-			if e := a.currentInput(); e != nil && e.kind == "bool" {
-				e.boolVal = false
-				a.inputs[a.activeInput] = *e
-				return a, nil
-			}
 		case "enter":
-			if a.compactForm {
-				if err := a.captureCompactAnswers(); err != nil {
-					return a, nil
-				}
-				ctx, err := a.buildContextFromInputs()
-				if err != nil {
-					return a.toError(err), nil
-				}
+			// Tests pueden rellenar app.inputs[].ti; Huh es la fuente de verdad en runtime.
+			if a.huhForm != nil {
+				a.syncFromHuhForm()
+			}
+			_ = a.syncLegacyInputsToHuh()
+			if ctx, err := a.buildContextFromHuh(); err == nil && len(ctx) > 0 {
 				a.answers = ctx
 				a.state = stateConfirm
 				return a, nil
 			}
-			if err := a.captureCurrentSequential(); err != nil {
-				return a, nil
-			}
-			a.activeInput++
-			if a.activeInput >= len(a.inputs) {
-				ctx, err := a.buildContextFromInputs()
-				if err != nil {
-					return a.toError(err), nil
-				}
-				a.answers = ctx
-				a.state = stateConfirm
-			}
-			return a, nil
 		}
 	}
 
-	if len(a.inputs) == 0 {
+	if a.huhForm == nil {
 		return a, nil
 	}
-	idx := a.activeInput
-	if idx < 0 {
-		idx = 0
+
+	updated, cmd := a.huhForm.Update(msg)
+	if f, ok := updated.(*huh.Form); ok {
+		a.huhForm = f
 	}
-	if idx >= len(a.inputs) {
-		idx = len(a.inputs) - 1
+	a.syncFromHuhForm()
+	if a.huhForm.State == huh.StateCompleted {
+		ctx, err := a.buildContextFromHuh()
+		if err != nil {
+			return a.toError(err), nil
+		}
+		a.answers = ctx
+		a.state = stateConfirm
 	}
-	a.activeInput = idx
-	entry := a.inputs[idx]
-	var cmd tea.Cmd
-	switch entry.kind {
-	case "string":
-		entry.ti, cmd = entry.ti.Update(msg)
-	case "enum":
-		entry.enum, cmd = entry.enum.Update(msg)
-	}
-	a.inputs[idx] = entry
 	return a, cmd
+}
+
+func (a *App) syncLegacyInputsToHuh() bool {
+	changed := false
+	for _, e := range a.inputs {
+		id := strings.TrimSpace(e.in.ID)
+		if id == "" {
+			continue
+		}
+		kind := strings.ToLower(strings.TrimSpace(e.in.Type))
+		// Los widgets legacy (bool/list) no reciben las pulsaciones de Huh; si los
+		// sincronizamos hacia los maps pisamos el estado real del formulario.
+		if a.huhForm != nil && (kind == "bool" || kind == "multiselect") {
+			continue
+		}
+		v, err := entryValue(e)
+		if err != nil {
+			continue
+		}
+		switch kind {
+		case "bool":
+			next := strings.EqualFold(v, "true") || v == "1" || strings.EqualFold(v, "y") || strings.EqualFold(v, "yes")
+			if cur, ok := a.huhBool[id]; !ok || cur != next {
+				a.huhBool[id] = next
+				changed = true
+			}
+		case "multiselect":
+			parts := []string{}
+			if strings.TrimSpace(v) != "" {
+				for _, p := range strings.Split(v, ",") {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						parts = append(parts, p)
+					}
+				}
+			}
+			cur := a.huhMulti[id]
+			if strings.Join(cur, ",") != strings.Join(parts, ",") {
+				a.huhMulti[id] = parts
+				changed = true
+			}
+		default:
+			if a.huhString[id] == v {
+				continue
+			}
+			// textinput legacy no se actualiza al escribir en Huh; queda "" y borraba
+			// huhString en cada tick y reconstruía el form (pérdida de foco).
+			if a.huhForm != nil && strings.TrimSpace(v) == "" {
+				continue
+			}
+			a.huhString[id] = v
+			changed = true
+		}
+	}
+	return changed
+}
+
+func (a *App) syncFromHuhForm() {
+	if a.huhForm == nil || a.selected == nil || a.selected.Manifest == nil {
+		return
+	}
+	for _, in := range a.selected.Manifest.Inputs {
+		id := strings.TrimSpace(in.ID)
+		if id == "" {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(in.Type)) {
+		case "bool":
+			a.huhBool[id] = a.huhForm.GetBool(id)
+		case "multiselect":
+			raw := a.huhForm.Get(id)
+			if v, ok := raw.([]string); ok {
+				a.huhMulti[id] = append([]string{}, v...)
+			}
+		default:
+			a.huhString[id] = a.huhForm.GetString(id)
+		}
+	}
 }
 
 func (a *App) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -307,13 +351,20 @@ func (a *App) updateConfirm(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		case "esc", "b":
 			a.state = stateInputs
-			return a, nil
+			return a, a.enterStateInputs()
 		case "enter":
 			a.state = stateProgress
 			return a, tea.Batch(a.spin.Tick, startScaffoldCmd(a.buildRequest(), a.engine))
 		}
 	}
 	return a, nil
+}
+
+func (a *App) enterStateInputs() tea.Cmd {
+	if a.huhForm == nil {
+		return nil
+	}
+	return a.huhForm.Init()
 }
 
 func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -407,7 +458,7 @@ func (a *App) renderBody() string {
 	case stateSelectTemplate:
 		return a.selector.View()
 	case stateInputs:
-		return a.renderInputs()
+		return a.renderInputsSplit()
 	case stateConfirm:
 		return a.renderConfirm()
 	case stateProgress:
@@ -421,7 +472,44 @@ func (a *App) renderBody() string {
 	}
 }
 
+func (a *App) renderInputsSplit() string {
+	leftPanel := a.renderInputs()
+	if a.width < 80 {
+		return leftPanel
+	}
+
+	leftWidth := int(float64(a.width) * 0.55)
+	if a.width >= 120 {
+		leftWidth = a.width / 2
+	}
+	rightWidth := a.width - leftWidth - 1
+	if rightWidth < 20 {
+		return leftPanel
+	}
+
+	maxLines := max(6, a.height-8)
+	rightPanel := stylePending.Render("  (calculando...)")
+	if req, err := a.buildPartialRequest(); err == nil && req != nil {
+		if tree, err := a.engine.PreviewFiles(req); err == nil && tree != nil {
+			rightPanel = RenderTree(tree, rightWidth-3, maxLines)
+		}
+	}
+
+	left := lipgloss.NewStyle().Width(leftWidth).Render(leftPanel)
+	right := lipgloss.NewStyle().
+		Width(rightWidth).
+		BorderLeft(true).
+		BorderStyle(lipgloss.NormalBorder()).
+		BorderForeground(colorBorder).
+		PaddingLeft(2).
+		Render(rightPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+}
+
 func (a *App) renderInputs() string {
+	if a.huhForm != nil {
+		return a.huhForm.View()
+	}
 	if len(a.inputs) == 0 {
 		return stylePending.Render("No hay inputs activos. Presiona Enter para continuar.")
 	}
@@ -501,7 +589,20 @@ func (a *App) renderConfirm() string {
 	for _, kv := range sortedContextPairs(a.answers) {
 		b.WriteString(styleCompletedLabel.Render(padRight(kv.key, 14)) + " " + styleCompletedValue.Render(kv.value) + "\n")
 	}
-	return styleActiveBox.Width(min(a.width-8, 72)).Render(b.String())
+
+	box := styleActiveBox.Width(min(a.width-8, 72)).Render(b.String())
+	treeBlock := stylePending.Render("(calculando...)")
+	if req, err := a.buildPartialRequest(); err == nil && req != nil {
+		if tree, err := a.engine.PreviewFiles(req); err == nil && tree != nil {
+			treeBlock = RenderTree(tree, min(a.width-8, 72), 10)
+		}
+	}
+	return strings.Join([]string{
+		box,
+		"",
+		styleCompletedLabel.Render("Archivos a generar:"),
+		treeBlock,
+	}, "\n")
 }
 
 func (a *App) renderProgress() string {
@@ -515,9 +616,9 @@ func (a *App) renderProgress() string {
 		case "done":
 			b.WriteString(styleCheckmark.Render("✓ ") + styleCompletedValue.Render(line.command) + "\n")
 		case "skipped":
-			b.WriteString(stylePending.Render("─ " + line.command + " (skipped)") + "\n")
+			b.WriteString(stylePending.Render("─ "+line.command+" (skipped)") + "\n")
 		case "error":
-			b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗ " + line.command) + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗ "+line.command) + "\n")
 		}
 	}
 	return b.String()
@@ -537,9 +638,9 @@ func (a *App) renderDone() string {
 				cmd = strings.TrimSpace(s.Name)
 			}
 			if s.Skipped {
-				b.WriteString(stylePending.Render("─  " + cmd + "  (skipped)") + "\n")
+				b.WriteString(stylePending.Render("─  "+cmd+"  (skipped)") + "\n")
 			} else if s.Error != nil {
-				b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗  " + cmd) + "\n")
+				b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗  "+cmd) + "\n")
 			} else {
 				b.WriteString(styleCheckmark.Render("✓  ") + styleCompletedValue.Render(cmd) + "\n")
 			}
@@ -568,6 +669,60 @@ func (a *App) prepareInputs() {
 	if a.selected == nil || a.selected.Manifest == nil {
 		return
 	}
+	a.huhString = map[string]string{}
+	a.huhBool = map[string]bool{}
+	a.huhMulti = map[string][]string{}
+
+	for _, in := range a.selected.Manifest.Inputs {
+		id := strings.TrimSpace(in.ID)
+		if id == "" {
+			continue
+		}
+		if v, ok := a.answers[id]; ok && v != nil {
+			switch strings.ToLower(strings.TrimSpace(in.Type)) {
+			case "bool":
+				s := strings.ToLower(strings.TrimSpace(fmt.Sprint(v)))
+				a.huhBool[id] = s == "true" || s == "1" || s == "yes" || s == "y"
+			case "multiselect":
+				if arr, ok := v.([]string); ok {
+					a.huhMulti[id] = append([]string{}, arr...)
+				} else {
+					a.huhMulti[id] = []string{}
+				}
+			default:
+				a.huhString[id] = fmt.Sprint(v)
+			}
+			continue
+		}
+		def, _ := ApplyDefault(in, a.answers)
+		switch strings.ToLower(strings.TrimSpace(in.Type)) {
+		case "bool":
+			s := strings.ToLower(strings.TrimSpace(def))
+			a.huhBool[id] = s == "true" || s == "1" || s == "yes" || s == "y"
+		case "multiselect":
+			if strings.TrimSpace(def) == "" {
+				a.huhMulti[id] = []string{}
+			} else {
+				parts := strings.Split(def, ",")
+				items := make([]string, 0, len(parts))
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						items = append(items, p)
+					}
+				}
+				a.huhMulti[id] = items
+			}
+		default:
+			a.huhString[id] = def
+		}
+	}
+	form, err := buildHuhFormForApp(a.selected.Manifest.Inputs, a)
+	if err == nil {
+		a.huhForm = form
+		a.applyHuhFormWidth()
+	}
+
 	entries := make([]inputEntry, 0, len(a.selected.Manifest.Inputs))
 	for _, in := range a.selected.Manifest.Inputs {
 		id := strings.TrimSpace(in.ID)
@@ -632,6 +787,32 @@ func (a *App) prepareInputs() {
 	a.compactForm = len(entries) <= 3
 }
 
+func (a *App) buildContextFromHuh() (dsl.Context, error) {
+	if a.selected == nil || a.selected.Manifest == nil {
+		return nil, fmt.Errorf("template not selected")
+	}
+	answers := map[string]string{}
+	for _, in := range a.selected.Manifest.Inputs {
+		id := strings.TrimSpace(in.ID)
+		if id == "" {
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(in.Type)) {
+		case "bool":
+			if a.huhBool[id] {
+				answers[id] = "true"
+			} else {
+				answers[id] = "false"
+			}
+		case "multiselect":
+			answers[id] = strings.Join(a.huhMulti[id], ",")
+		default:
+			answers[id] = strings.TrimSpace(a.huhString[id])
+		}
+	}
+	return BuildContext(a.selected.Manifest.Inputs, answers)
+}
+
 func (a *App) captureCompactAnswers() error {
 	for _, e := range a.inputs {
 		id := strings.TrimSpace(e.in.ID)
@@ -679,6 +860,118 @@ func (a *App) buildRequest() *tmpl.ScaffoldRequest {
 		Variables: a.answers,
 		DryRun:    false,
 	}
+}
+
+func (a *App) buildPartialRequest() (*tmpl.ScaffoldRequest, error) {
+	if a.selected == nil || a.selected.Manifest == nil {
+		return nil, fmt.Errorf("template not selected")
+	}
+
+	ctx := dsl.Context{}
+	liveAnswers := map[string]string{}
+	if len(a.huhString) > 0 || len(a.huhBool) > 0 || len(a.huhMulti) > 0 {
+		for id, v := range a.huhString {
+			liveAnswers[id] = strings.TrimSpace(v)
+		}
+		for id, v := range a.huhBool {
+			if v {
+				liveAnswers[id] = "true"
+			} else {
+				liveAnswers[id] = "false"
+			}
+		}
+		for id, v := range a.huhMulti {
+			liveAnswers[id] = strings.Join(v, ",")
+		}
+	} else {
+		for _, e := range a.inputs {
+			id := strings.TrimSpace(e.in.ID)
+			if id == "" {
+				continue
+			}
+			v, err := entryValue(e)
+			if err != nil {
+				continue
+			}
+			liveAnswers[id] = v
+		}
+	}
+	for _, in := range a.selected.Manifest.Inputs {
+		id := strings.TrimSpace(in.ID)
+		if id == "" {
+			continue
+		}
+		if v, ok := liveAnswers[id]; ok {
+			switch strings.ToLower(strings.TrimSpace(in.Type)) {
+			case "bool":
+				s := strings.ToLower(strings.TrimSpace(v))
+				ctx[id] = s == "true" || s == "1" || s == "yes" || s == "y"
+			case "multiselect":
+				if strings.TrimSpace(v) == "" {
+					ctx[id] = []string{}
+				} else {
+					parts := strings.Split(v, ",")
+					items := make([]string, 0, len(parts))
+					for _, p := range parts {
+						p = strings.TrimSpace(p)
+						if p != "" {
+							items = append(items, p)
+						}
+					}
+					ctx[id] = items
+				}
+			default:
+				ctx[id] = v
+			}
+			continue
+		}
+		if v, ok := a.answers[id]; ok {
+			ctx[id] = v
+			continue
+		}
+		def, err := ApplyDefault(in, ctx)
+		if err != nil {
+			// Keep preview resilient if interpolation/default cannot be resolved yet.
+			ctx[id] = ""
+			continue
+		}
+		switch strings.ToLower(strings.TrimSpace(in.Type)) {
+		case "bool":
+			s := strings.ToLower(strings.TrimSpace(def))
+			ctx[id] = s == "true" || s == "1" || s == "yes" || s == "y"
+		case "multiselect":
+			if strings.TrimSpace(def) == "" {
+				ctx[id] = []string{}
+			} else {
+				parts := strings.Split(def, ",")
+				items := make([]string, 0, len(parts))
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					if p != "" {
+						items = append(items, p)
+					}
+				}
+				ctx[id] = items
+			}
+		default:
+			ctx[id] = def
+		}
+	}
+
+	return &tmpl.ScaffoldRequest{
+		Template:  a.selected,
+		OutputDir: a.outputDir(),
+		Variables: ctx,
+		DryRun:    true,
+	}, nil
+}
+
+func (a *App) currentWhenContext() dsl.Context {
+	req, err := a.buildPartialRequest()
+	if err != nil || req == nil || req.Variables == nil {
+		return dsl.Context{}
+	}
+	return req.Variables
 }
 
 func (a *App) outputDir() string {
@@ -757,6 +1050,34 @@ func (a *App) resizeComponents() {
 			a.inputs[i].enum.SetSize(a.width-8, min(max(4, h-6), 10))
 		}
 	}
+}
+
+// inputsFormWidth coincide con el ancho del panel izquierdo en renderInputsSplit
+// para que Huh no crea que ocupa todo el terminal cuando hay vista partida.
+func (a *App) inputsFormWidth() int {
+	if a.width < 80 {
+		return a.width
+	}
+	leftWidth := int(float64(a.width) * 0.55)
+	if a.width >= 120 {
+		leftWidth = a.width / 2
+	}
+	rightWidth := a.width - leftWidth - 1
+	if rightWidth < 20 {
+		return a.width
+	}
+	return leftWidth
+}
+
+func (a *App) applyHuhFormWidth() {
+	if a.huhForm == nil || a.width <= 0 {
+		return
+	}
+	w := a.inputsFormWidth()
+	if w <= 0 {
+		return
+	}
+	a.huhForm = a.huhForm.WithWidth(w)
 }
 
 func (a *App) currentInput() *inputEntry {

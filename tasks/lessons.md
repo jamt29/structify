@@ -99,3 +99,28 @@
 - **Contexto:** Buscar nombre de proyecto sin restricciones genera falsos positivos cuando el nombre es muy genérico.
 - **Lección:** Detectar variables sugeridas solo en contextos estructurales (module/import/name de manifests) y no en texto libre/comentarios.
 - **Aplicar en:** `internal/template/analyzer.go`, futuros detectores automáticos de variables.
+
+### L022 — Migraciones de UI deben conservar compatibilidad de tests internos
+- **Contexto:** Al migrar `stateInputs` de componentes manuales a `huh.Form`, tests existentes de `internal/tui/app_test.go` seguían inyectando valores sobre `app.inputs`.
+- **Lección:** Mantener una capa de sincronización de compatibilidad durante la migración (`syncLegacyInputsToHuh`) evita regressions y permite evolución gradual sin reescribir toda la suite al mismo tiempo.
+- **Aplicar en:** `internal/tui/app.go` durante futuras migraciones de componentes visuales.
+
+### L023 — El size inicial debe propagarse a pantallas creadas después
+- **Contexto:** Aunque Bubble Tea envía `WindowSizeMsg` al inicio, si `App` se crea después (desde menú) puede no recibir ese mensaje inicial y renderizar con defaults desalineados.
+- **Lección:** Mantener fallback seguro (`80x24`) y, al transicionar de pantalla, inyectar explícitamente el tamaño conocido (`tea.WindowSizeMsg`) al sub-modelo recién creado.
+- **Aplicar en:** `internal/tui/root.go` al crear `App` desde `screenMenu`/`screenTemplates`.
+
+### L024 — Huh `Value()` requiere punteros con lifetime correcto
+- **Contexto:** `Value(&localVar)` en Huh escribe en esa variable; usar `&val` dentro de un `for range` o `&s` en el cuerpo del loop hace que varios campos compartan la misma dirección o apunten a memoria inválida. El formulario parece aceptar input pero al confirmar los valores llegan vacíos o incorrectos.
+- **Lección:** Los punteros pasados a `Value()` deben vivir en el heap (`new(T)`) o en campos del modelo `App` que persistan mientras exista el form, nunca a variables locales efímeras del builder.
+- **Aplicar en:** `internal/tui/huh_inputs.go` siempre que se use `huh.NewInput` / `NewSelect` / `NewConfirm` / `NewMultiSelect` con `.Value(...)`.
+
+### L025 — Huh embebido debe recibir `WindowSizeMsg` del modelo raíz
+- **Contexto:** `App.Update` manejaba `tea.WindowSizeMsg` al inicio y retornaba sin pasarlo a `huh.Form`. El `Init()` de Huh encola `tea.WindowSize()` para dimensionar grupos; ese mensaje nunca llegaba al formulario si el padre lo absorbía.
+- **Lección:** Cuando Huh vive dentro de otro modelo Bubble Tea, reenviar `WindowSizeMsg` a `form.Update` (y alinear `WithWidth` con el panel real si hay split/lipgloss) evita campos con ancho 0 y el síntoma de “no puedo escribir / no hay foco”.
+- **Aplicar en:** `internal/tui/app.go` (`Update` + `applyHuhFormWidth` / `inputsFormWidth`).
+
+### L026 — No sincronizar widgets legacy → Huh en cada tick si el legacy está desactualizado
+- **Contexto:** Tras migrar a Huh se mantuvieron `app.inputs` con `textinput` para tests. `syncLegacyInputsToHuh()` copiaba esos valores a `huhString` antes de cada `huhForm.Update`. El teclado alimenta solo Huh, no el `textinput`, así que el legacy seguía vacío y **pisaba** el texto tecleado; si además se reconstruía el form al detectar cambio, el foco parpadeaba y parecía imposible escribir.
+- **Lección:** Con `huhForm != nil`, no volcar legacy vacío sobre maps que ya reflejan Huh; no reconstruir el form en bucle por ese “cambio”. En Enter, volcar primero `syncFromHuhForm()` y luego fusionar solo lo que aporte el legacy (p. ej. tests con `ti.SetValue`).
+- **Aplicar en:** `internal/tui/app.go` (`updateInputs`, `syncLegacyInputsToHuh`).

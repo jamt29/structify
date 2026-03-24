@@ -2,8 +2,10 @@ package tui
 
 import (
 	"fmt"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
 
 	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/engine"
@@ -23,8 +25,8 @@ const (
 type RootModel struct {
 	screen screen
 
-	menu   MenuModel
-	app    *App
+	menu            MenuModel
+	app             *App
 	templatesScreen *TemplatesModel
 	githubScreen    *GitHubModel
 	configScreen    *ConfigModel
@@ -50,37 +52,38 @@ func NewRootModel(templates []*template.Template, eng *engine.Engine) RootModel 
 		templatesScreen: nil,
 		githubScreen:    nil,
 		configScreen:    nil,
-		width:           100,
-		height:          30,
+		width:           80,
+		height:          24,
 	}
 }
 
 func (r RootModel) Init() tea.Cmd {
+	sizeCmd := initialWindowSizeCmd()
 	switch r.screen {
 	case screenMenu:
-		return r.menu.Init()
+		return tea.Batch(r.menu.Init(), sizeCmd)
 	case screenNew:
 		if r.app != nil {
-			return r.app.Init()
+			return tea.Batch(r.app.Init(), sizeCmd)
 		}
-		return nil
+		return sizeCmd
 	case screenTemplates:
 		if r.templatesScreen != nil {
-			return r.templatesScreen.Init()
+			return tea.Batch(r.templatesScreen.Init(), sizeCmd)
 		}
-		return nil
+		return sizeCmd
 	case screenGitHub:
 		if r.githubScreen != nil {
-			return r.githubScreen.Init()
+			return tea.Batch(r.githubScreen.Init(), sizeCmd)
 		}
-		return nil
+		return sizeCmd
 	case screenConfig:
 		if r.configScreen != nil {
-			return r.configScreen.Init()
+			return tea.Batch(r.configScreen.Init(), sizeCmd)
 		}
-		return nil
+		return sizeCmd
 	default:
-		return nil
+		return sizeCmd
 	}
 }
 
@@ -141,6 +144,9 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				r.app = app
 				r.screen = screenNew
+				ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+				newApp, _ := r.app.Update(ws)
+				r.app = newApp.(*App)
 				return r, r.app.Init()
 			case ActionTemplates:
 				r.templatesScreen = NewTemplatesModel(r.templates)
@@ -211,10 +217,13 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			app.compactForm = len(app.inputs) <= 3
 
 			r.app = app
+			ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+			newApp, _ := r.app.Update(ws)
+			r.app = newApp.(*App)
 			r.templatesScreen.transitionToNew = nil
 			r.templatesScreen.detail = nil
 			r.screen = screenNew
-			return r, nil
+			return r, r.app.Init()
 		}
 
 		if r.templatesScreen.done {
@@ -265,6 +274,16 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	default:
 		return r, nil
+	}
+}
+
+func initialWindowSizeCmd() tea.Cmd {
+	return func() tea.Msg {
+		w, h, err := term.GetSize(int(os.Stdout.Fd()))
+		if err != nil || w <= 0 || h <= 0 {
+			return nil
+		}
+		return tea.WindowSizeMsg{Width: w, Height: h}
 	}
 }
 
@@ -344,4 +363,3 @@ func Run(templates []*template.Template, eng *engine.Engine) error {
 	}
 	return fm.err
 }
-
