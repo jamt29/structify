@@ -7,12 +7,13 @@ import (
 	"sort"
 	"text/tabwriter"
 
+	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/engine"
 	"github.com/spf13/cobra"
 )
 
 var (
-	listJSON     = false
+	listJSON      = false
 	engineListAll = engine.ListAll
 )
 
@@ -37,8 +38,14 @@ var listCmd = &cobra.Command{
 			if listJSON {
 				return printListJSON(cmd.OutOrStdout(), nil)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "No templates found.")
-			fmt.Fprintln(cmd.OutOrStdout(), "You can add one with: structify template add <github-url>")
+			if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+				log := tmplStructuredLog(cmd)
+				log.Info("No templates found.")
+				log.Info("You can add one with: structify template add <github-url>")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "No templates found.")
+				fmt.Fprintln(cmd.OutOrStdout(), "You can add one with: structify template add <github-url>")
+			}
 			return nil
 		}
 
@@ -115,4 +122,3 @@ func init() {
 	listCmd.Flags().BoolVar(&listJSON, "json", false, "print templates as JSON")
 	Cmd.AddCommand(listCmd)
 }
-

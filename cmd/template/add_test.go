@@ -136,4 +136,3 @@ func TestRunAddFromGit_CloneError_Wrapped(t *testing.T) {
 		t.Fatalf("expected error from clone failure")
 	}
 }
-

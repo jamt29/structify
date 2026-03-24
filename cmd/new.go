@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	charmlog "github.com/charmbracelet/log"
 	"golang.org/x/term"
 
 	"github.com/jamt29/structify/internal/config"
@@ -61,6 +62,8 @@ func runNew(cmd *cobra.Command, args []string) error {
 		eng := engine.New()
 		return tui.RunApp(all, eng)
 	}
+
+	cliLog := config.NewLogger(verbose)
 
 	// 3. Select template (flags-only / no TTY).
 	tpl, err := resolveTemplate(newTemplate, all, false)
@@ -132,13 +135,13 @@ func runNew(cmd *cobra.Command, args []string) error {
 		return runDryRun(req, eng)
 	}
 
-	res, err := runNonInteractive(req)
+	res, err := runNonInteractive(req, cliLog)
 	if err != nil {
 		return err
 	}
 
 	// 7. Summary (non-interactive: keep it simple).
-	fmt.Printf("  ✓ Created %d files\n", len(res.FilesCreated))
+	cliLog.Info("project created", "files", len(res.FilesCreated))
 	return nil
 }
 
@@ -428,8 +431,8 @@ func applyComputedValues(computed []dsl.Computed, ctx dsl.Context) error {
 	return nil
 }
 
-func runNonInteractive(req *template.ScaffoldRequest) (*template.ScaffoldResult, error) {
-	fmt.Println("  → Creating project...")
+func runNonInteractive(req *template.ScaffoldRequest, log *charmlog.Logger) (*template.ScaffoldResult, error) {
+	log.Info("Creating project...")
 
 	outAbs, err := filepath.Abs(req.OutputDir)
 	if err != nil {
@@ -461,8 +464,7 @@ func runNonInteractive(req *template.ScaffoldRequest) (*template.ScaffoldResult,
 	}
 	_ = skipped
 
-	obs := printStepObserver{}
-	stepResults, err := engine.ExecuteStepsWithObserver(req.Template.Manifest.Steps, req.Variables, outAbs, req.DryRun, obs)
+	stepResults, err := engine.ExecuteStepsWithObserver(req.Template.Manifest.Steps, req.Variables, outAbs, req.DryRun, printStepObserver{log: log})
 	if err != nil {
 		_ = rb.Rollback()
 		return &template.ScaffoldResult{
@@ -482,20 +484,24 @@ func runNonInteractive(req *template.ScaffoldRequest) (*template.ScaffoldResult,
 	}, nil
 }
 
-type printStepObserver struct{}
+type printStepObserver struct {
+	log *charmlog.Logger
+}
 
 func (printStepObserver) OnStepStart(step dsl.Step, _ string) {
-	// no-op; keep logs clean
 	_ = step
 }
-func (printStepObserver) OnStepSkipped(step dsl.Step) {
-	fmt.Printf("  ─ %s (skipped)\n", step.Name)
+
+func (o printStepObserver) OnStepSkipped(step dsl.Step) {
+	o.log.Debug("step skipped", "step", step.Run, "name", step.Name)
 }
-func (printStepObserver) OnStepSuccess(step dsl.Step, _ string) {
-	fmt.Printf("  ✓ %s\n", step.Name)
+
+func (o printStepObserver) OnStepSuccess(step dsl.Step, _ string) {
+	o.log.Info("step completed", "step", step.Run, "name", step.Name)
 }
-func (printStepObserver) OnStepFailure(step dsl.Step, err error, _ string) {
-	fmt.Printf("  ✗ %s (%s)\n", step.Name, err.Error())
+
+func (o printStepObserver) OnStepFailure(step dsl.Step, err error, _ string) {
+	o.log.Error("step failed", "name", step.Name, "step", step.Run, "err", err)
 }
 
 func dirExistsAndEmpty(path string) (exists bool, empty bool, err error) {
@@ -537,19 +543,20 @@ func runDryRun(req *template.ScaffoldRequest, eng *engine.Engine) error {
 		return err
 	}
 
-	fmt.Println("Dry run — no files will be written.")
-	fmt.Printf("Template : %s\n", req.Template.Manifest.Name)
-	fmt.Printf("Output   : %s\n", prettyPath(req.OutputDir))
-	fmt.Printf("Variables: %s\n", formatVars(req.Variables))
-	fmt.Println("Files that would be created:")
+	// Primary dry-run report on stdout so it is visible and pipe-friendly; charm/log stays on stderr for other non-interactive paths.
+	fmt.Fprintln(os.Stdout, "Dry run — no files will be written.")
+	fmt.Fprintf(os.Stdout, "Template : %s\n", req.Template.Manifest.Name)
+	fmt.Fprintf(os.Stdout, "Output   : %s\n", prettyPath(req.OutputDir))
+	fmt.Fprintf(os.Stdout, "Variables: %s\n", formatVars(req.Variables))
+	fmt.Fprintln(os.Stdout, "Files that would be created:")
 	for _, f := range res.FilesCreated {
-		fmt.Println(f)
+		fmt.Fprintln(os.Stdout, f)
 	}
-	fmt.Println("Steps that would run:")
+	fmt.Fprintln(os.Stdout, "Steps that would run:")
 	for _, line := range dryRunSteps(req.Template.Manifest.Steps, req.Variables) {
-		fmt.Println(line)
+		fmt.Fprintln(os.Stdout, line)
 	}
-	fmt.Println("No files were written.")
+	fmt.Fprintln(os.Stdout, "No files were written.")
 	return nil
 }
 
@@ -666,5 +673,3 @@ func validateManifestInputs(inputs []dsl.Input, ctx dsl.Context) error {
 
 	return nil
 }
-
-

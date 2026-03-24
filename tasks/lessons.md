@@ -120,6 +120,31 @@
 - **Lección:** Cuando Huh vive dentro de otro modelo Bubble Tea, reenviar `WindowSizeMsg` a `form.Update` (y alinear `WithWidth` con el panel real si hay split/lipgloss) evita campos con ancho 0 y el síntoma de “no puedo escribir / no hay foco”.
 - **Aplicar en:** `internal/tui/app.go` (`Update` + `applyHuhFormWidth` / `inputsFormWidth`).
 
+### L027 — Transiciones en Bubble Tea: no capturar el modelo en closures retardados
+- **Contexto:** Al animar cambios de pantalla en `RootModel` con `tea.Tick`, un `pendingSwitch func() tea.Cmd` que cerraba sobre el `RootModel` recibido en `Update` aplicaba mutaciones sobre una copia obsoleta del estado (el runtime ya había sustituido el modelo).
+- **Lección:** Describir el cambio pendiente con datos (`enum` + campos auxiliares como `pendingSelTemplate`) y ejecutar `applyPendingTransition()` en el tick usando el receptor **actual** devuelto por el framework.
+- **Aplicar en:** `internal/tui/root.go`, futuros modelos con animaciones o pasos diferidos.
+
+### L028 — Log estructurado en subcomandos sin rom tests que capturan `SetOut(buf)`
+- **Contexto:** `UseStructuredLogOut` basado solo en `os.Stdout` o en “no TTY” rompe tests que redirigen `cmd.SetOut(&bytes.Buffer{})` o fuerzan salida no terminal.
+- **Lección:** Considerar estructurado solo si `OutOrStdout()` es `*os.File` y `!term.IsTerminal(fd)`; los `io.Writer` que no son `*os.File` mantienen `fmt` hacia el writer del comando.
+- **Aplicar en:** `internal/config/logger.go`, `cmd/template/*`, otros CLIs con cobertura sobre buffers.
+
+### L029 — Informe principal del CLI vs charmbracelet/log
+- **Contexto:** Tras enrutar el dry-run de `new` por `charmbracelet/log` a stderr, algunas terminales o integraciones mostraban la sesión “en blanco” porque el usuario miraba solo stdout.
+- **Lección:** El **cuerpo redirigible y visible por defecto** del comando (listas dry-run, tablas pensadas para pipe) debe ir a **stdout** con `fmt`; reservar log con niveles a stderr para progreso/errores secundarios o mantener coherencia con herramientas Unix.
+- **Aplicar en:** `cmd/new.go` (`runDryRun`), futuros comandos con salida máquina+humano.
+
+### L030 — `RunApp` no pasa por `RootModel`: el centrado debe vivir también en `App.View`
+- **Contexto:** `structify new` en TTY usa `tui.RunApp`, que dibuja `*App` sin envolver `RootModel.View`; el comentario decía que RootModel centraba, pero ese código no se ejecutaba en esta ruta, dejando `stateProgress` arriba-izquierda.
+- **Lección:** Si hay dos entradas TUI (`Run` vs `RunApp`), duplicar en `App.View()` las reglas de layout mínimas (p. ej. `centerContent` / `centerContentHorizontal` por estado) o factorizar un helper compartido.
+- **Aplicar en:** `internal/tui/app.go`, `internal/tui/root.go`.
+
+### L031 — `stateDone` necesita política de salida explícita según entrypoint
+- **Contexto:** `stateDone/stateError` marcaba `done=true` pero no siempre emitía `tea.Quit`; en `RunApp` (App top-level) eso dejaba la UI abierta esperando Ctrl+C, mientras en `RootModel` sí conviene no salir y volver al menú.
+- **Lección:** Definir un flag de comportamiento de salida (`quitOnDoneKey`) para separar el path top-level (`RunApp` => `tea.Quit`) del path embebido (`RootModel` => transición interna).
+- **Aplicar en:** `internal/tui/app.go`, futuros modelos reutilizados en más de un entrypoint.
+
 ### L026 — No sincronizar widgets legacy → Huh en cada tick si el legacy está desactualizado
 - **Contexto:** Tras migrar a Huh se mantuvieron `app.inputs` con `textinput` para tests. `syncLegacyInputsToHuh()` copiaba esos valores a `huhString` antes de cada `huhForm.Update`. El teclado alimenta solo Huh, no el `textinput`, así que el legacy seguía vacío y **pisaba** el texto tecleado; si además se reconstruía el form al detectar cambio, el foco parpadeaba y parecía imposible escribir.
 - **Lección:** Con `huhForm != nil`, no volcar legacy vacío sobre maps que ya reflejan Huh; no reconstruir el form en bucle por ese “cambio”. En Enter, volcar primero `syncFromHuhForm()` y luego fusionar solo lo que aporte el legacy (p. ej. tests con `ti.SetValue`).

@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/jamt29/structify/internal/config"
 	tmpl "github.com/jamt29/structify/internal/template"
 	"github.com/spf13/cobra"
 )
@@ -52,7 +53,11 @@ var removeCmd = &cobra.Command{
 		if err := tmpl.Remove(name); err != nil {
 			return err
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Template %q removed.\n", name)
+		if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+			tmplStructuredLog(cmd).Info("Template removed", "name", name)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Template %q removed.\n", name)
+		}
 		return nil
 	},
 }
@@ -72,4 +77,3 @@ func confirmRemoval(r io.Reader, w io.Writer, name string) (bool, error) {
 	answer := strings.ToLower(strings.TrimSpace(line))
 	return answer == "y" || answer == "yes", nil
 }
-

@@ -14,4 +14,3 @@ func templateMinValidManifestYAML(name string) string {
 		"files: []\n" +
 		"steps: []\n"
 }
-

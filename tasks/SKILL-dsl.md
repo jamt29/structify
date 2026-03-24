@@ -56,6 +56,22 @@ inputs:
     type: bool
     default: true
 
+  - id: features
+    prompt: "Features?"
+    type: multiselect
+    options: [auth, docker, metrics]
+    default: [auth]
+
+  - id: project_path
+    prompt: "Project path?"
+    type: path
+    must_exist: false
+
+# ── COMPUTED ──────────────────────────────────────────────
+computed:
+  - id: module_path_default
+    value: "github.com/{{ author }}/{{ project_name }}"
+
 # ── FILES ─────────────────────────────────────────────────
 # Control de qué archivos/carpetas incluir o excluir
 files:
@@ -103,6 +119,12 @@ steps:
 | `string` | Texto libre | `string` |
 | `enum` | Una opción de una lista | `string` (el valor elegido) |
 | `bool` | Sí/No | `bool` |
+| `multiselect` | Varias opciones | `[]string` |
+| `path` | Ruta de archivo/directorio | `string` |
+
+Notas:
+- `multiselect.default` se expresa como lista YAML.
+- `path.must_exist` controla validación de existencia de ruta.
 
 ---
 
@@ -150,6 +172,8 @@ when: !use_docker
 when: transport == "http" && orm != "none"
 when: transport == "http" || transport == "grpc"
 when: (transport == "http" || transport == "grpc") && orm != "none"
+when: contains(features, "docker")
+when: contains(features, "auth") && transport == "http"
 ```
 
 ### Ejemplos inválidos (errores de usuario)
@@ -381,6 +405,9 @@ Tabla de casos para el evaluator:
 {"a == 'x' && b == 'y'", ctx{"a":"x","b":"z"},       false}
 {"a == 'x' || b == 'y'", ctx{"a":"z","b":"y"},       true}
 {"(a == 'x' || b == 'y') && c != 'z'", ctx{...},    true}
+{"contains(features, 'docker')", ctx{"features":[]string{"docker"}}, true}
+{"contains(features, 'auth') && transport == 'http'", ctx{"features":[]string{"auth"}, "transport":"http"}, true}
+{"contains(features, 'auth')", ctx{"features":[]string{"metrics"}}, false}
 
 // Casos que DEBEN fallar con error descriptivo
 {"transport = 'http'",   ctx{},   error: "operador inválido '='"}

@@ -3,8 +3,11 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
 	"github.com/jamt29/structify/internal/dsl"
@@ -20,6 +23,35 @@ const (
 	screenTemplates
 	screenGitHub
 	screenConfig
+)
+
+type transitionPhase int
+
+const (
+	transitionIdle transitionPhase = iota
+	transitionFadeOut
+	transitionFadeIn
+)
+
+// ~4–5 ticks at 16ms ≈ 64–80ms total per half.
+const transitionAlphaDelta = 0.22
+
+type transitionTickMsg struct{}
+
+type rootPendingKind int
+
+const (
+	rootPendingNone rootPendingKind = iota
+	rootPendingMenuNew
+	rootPendingMenuTemplates
+	rootPendingMenuGitHub
+	rootPendingMenuConfig
+	rootPendingMenuDefaultReset
+	rootPendingNewToMenu
+	rootPendingTemplatesToMenu
+	rootPendingTemplatesToNew
+	rootPendingGitHubToMenu
+	rootPendingConfigToMenu
 )
 
 type RootModel struct {
@@ -38,6 +70,11 @@ type RootModel struct {
 	height int
 
 	err error
+
+	transPhase         transitionPhase
+	transAlpha         float64
+	pending            rootPendingKind
+	pendingSelTemplate *template.Template // for rootPendingTemplatesToNew
 }
 
 func NewRootModel(templates []*template.Template, eng *engine.Engine) RootModel {
@@ -54,7 +91,162 @@ func NewRootModel(templates []*template.Template, eng *engine.Engine) RootModel 
 		configScreen:    nil,
 		width:           80,
 		height:          24,
+		transPhase:      transitionIdle,
+		transAlpha:      1,
 	}
+}
+
+func transitionTickCmd() tea.Cmd {
+	return tea.Tick(16*time.Millisecond, func(time.Time) tea.Msg { return transitionTickMsg{} })
+}
+
+func (r RootModel) startTransition(kind rootPendingKind) (tea.Model, tea.Cmd) {
+	r.pending = kind
+	r.transPhase = transitionFadeOut
+	r.transAlpha = 1.0
+	return r, transitionTickCmd()
+}
+
+func (r RootModel) applyPendingTransition() (RootModel, tea.Cmd) {
+	kind := r.pending
+	r.pending = rootPendingNone
+	selTpl := r.pendingSelTemplate
+	r.pendingSelTemplate = nil
+
+	switch kind {
+	case rootPendingMenuNew:
+		app, err := newApp(r.templates, r.engine)
+		if err != nil {
+			r.err = err
+			return r, tea.Quit
+		}
+		r.app = app
+		r.screen = screenNew
+		ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+		newApp, _ := r.app.Update(ws)
+		r.app = newApp.(*App)
+		return r, r.app.Init()
+
+	case rootPendingMenuTemplates:
+		r.templatesScreen = NewTemplatesModel(r.templates)
+		r.screen = screenTemplates
+		return r, r.templatesScreen.Init()
+
+	case rootPendingMenuGitHub:
+		r.githubScreen = NewGitHubModel()
+		r.screen = screenGitHub
+		return r, r.githubScreen.Init()
+
+	case rootPendingMenuConfig:
+		r.configScreen = NewConfigModel(r.templates)
+		r.screen = screenConfig
+		return r, r.configScreen.Init()
+
+	case rootPendingMenuDefaultReset:
+		r.screen = screenMenu
+		r.menu = NewMenuModel()
+		r.menu.exitOnSelect = false
+		return r, r.menu.Init()
+
+	case rootPendingNewToMenu:
+		r.screen = screenMenu
+		r.menu = NewMenuModel()
+		r.menu.exitOnSelect = false
+		r.app = nil
+		return r, r.menu.Init()
+
+	case rootPendingTemplatesToMenu:
+		r.screen = screenMenu
+		r.menu = NewMenuModel()
+		r.menu.exitOnSelect = false
+		r.templatesScreen = nil
+		return r, r.menu.Init()
+
+	case rootPendingTemplatesToNew:
+		app, err := newApp(r.templates, r.engine)
+		if err != nil {
+			r.err = err
+			return r, tea.Quit
+		}
+		app.selected = selTpl
+		app.answers = dsl.Context{}
+		app.prepareInputs()
+		app.state = stateInputs
+		app.done = false
+		app.activeInput = 0
+		app.compactForm = len(app.inputs) <= 3
+
+		r.app = app
+		ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+		newApp, _ := r.app.Update(ws)
+		r.app = newApp.(*App)
+		if r.templatesScreen != nil {
+			r.templatesScreen.transitionToNew = nil
+			r.templatesScreen.detail = nil
+		}
+		r.screen = screenNew
+		return r, r.app.Init()
+
+	case rootPendingGitHubToMenu:
+		r.screen = screenMenu
+		r.menu = NewMenuModel()
+		r.menu.exitOnSelect = false
+		r.githubScreen = nil
+		return r, r.menu.Init()
+
+	case rootPendingConfigToMenu:
+		r.screen = screenMenu
+		r.menu = NewMenuModel()
+		r.menu.exitOnSelect = false
+		r.configScreen = nil
+		return r, r.menu.Init()
+
+	default:
+		return r, nil
+	}
+}
+
+func (r RootModel) handleTransitionTick() (tea.Model, tea.Cmd) {
+	switch r.transPhase {
+	case transitionFadeOut:
+		r.transAlpha -= transitionAlphaDelta
+		if r.transAlpha <= 0 {
+			r.transAlpha = 0
+			next, cmd := r.applyPendingTransition()
+			r = next
+			if r.err != nil {
+				r.transPhase = transitionIdle
+				r.transAlpha = 1
+				return r, cmd
+			}
+			r.transPhase = transitionFadeIn
+			return r, tea.Batch(cmd, transitionTickCmd())
+		}
+		return r, transitionTickCmd()
+	case transitionFadeIn:
+		r.transAlpha += transitionAlphaDelta
+		if r.transAlpha >= 1 {
+			r.transAlpha = 1
+			r.transPhase = transitionIdle
+			return r, nil
+		}
+		return r, transitionTickCmd()
+	default:
+		return r, nil
+	}
+}
+
+// applyRootTransitionAlpha simulates fade: terminals have no real opacity.
+func applyRootTransitionAlpha(content string, alpha float64) string {
+	if alpha >= 0.99 {
+		return content
+	}
+	if alpha <= 0.02 {
+		lines := strings.Split(content, "\n")
+		blank := make([]string, len(lines))
+		return strings.Join(blank, "\n")
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#5C6370")).Render(content)
 }
 
 func (r RootModel) Init() tea.Cmd {
@@ -124,6 +316,13 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return r, tea.Batch(cmds...)
 	}
 
+	if _, ok := msg.(transitionTickMsg); ok {
+		return r.handleTransitionTick()
+	}
+	if r.transPhase != transitionIdle {
+		return r, nil
+	}
+
 	switch r.screen {
 	case screenMenu:
 		prevSelected := r.menu.selected
@@ -137,34 +336,15 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			switch action {
 			case ActionNew:
-				app, err := newApp(r.templates, r.engine)
-				if err != nil {
-					r.err = err
-					return r, tea.Quit
-				}
-				r.app = app
-				r.screen = screenNew
-				ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
-				newApp, _ := r.app.Update(ws)
-				r.app = newApp.(*App)
-				return r, r.app.Init()
+				return r.startTransition(rootPendingMenuNew)
 			case ActionTemplates:
-				r.templatesScreen = NewTemplatesModel(r.templates)
-				r.screen = screenTemplates
-				return r, r.templatesScreen.Init()
+				return r.startTransition(rootPendingMenuTemplates)
 			case ActionGitHub:
-				r.githubScreen = NewGitHubModel()
-				r.screen = screenGitHub
-				return r, r.githubScreen.Init()
+				return r.startTransition(rootPendingMenuGitHub)
 			case ActionConfig:
-				r.configScreen = NewConfigModel(r.templates)
-				r.screen = screenConfig
-				return r, r.configScreen.Init()
+				return r.startTransition(rootPendingMenuConfig)
 			default:
-				r.screen = screenMenu
-				r.menu = NewMenuModel()
-				r.menu.exitOnSelect = false
-				return r, r.menu.Init()
+				return r.startTransition(rootPendingMenuDefaultReset)
 			}
 		}
 
@@ -182,11 +362,7 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.app = newApp.(*App)
 
 		if r.app.Done() {
-			r.screen = screenMenu
-			r.menu = NewMenuModel()
-			r.menu.exitOnSelect = false
-			r.app = nil
-			return r, r.menu.Init()
+			return r.startTransition(rootPendingNewToMenu)
 		}
 
 		return r, cmd
@@ -203,35 +379,12 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r.templatesScreen = newM.(*TemplatesModel)
 
 		if r.templatesScreen.transitionToNew != nil {
-			app, err := newApp(r.templates, r.engine)
-			if err != nil {
-				r.err = err
-				return r, tea.Quit
-			}
-			app.selected = r.templatesScreen.transitionToNew
-			app.answers = dsl.Context{}
-			app.prepareInputs()
-			app.state = stateInputs
-			app.done = false
-			app.activeInput = 0
-			app.compactForm = len(app.inputs) <= 3
-
-			r.app = app
-			ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
-			newApp, _ := r.app.Update(ws)
-			r.app = newApp.(*App)
-			r.templatesScreen.transitionToNew = nil
-			r.templatesScreen.detail = nil
-			r.screen = screenNew
-			return r, r.app.Init()
+			r.pendingSelTemplate = r.templatesScreen.transitionToNew
+			return r.startTransition(rootPendingTemplatesToNew)
 		}
 
 		if r.templatesScreen.done {
-			r.screen = screenMenu
-			r.menu = NewMenuModel()
-			r.menu.exitOnSelect = false
-			r.templatesScreen = nil
-			return r, r.menu.Init()
+			return r.startTransition(rootPendingTemplatesToMenu)
 		}
 
 		return r, cmd
@@ -246,11 +399,7 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newM, cmd := r.githubScreen.Update(msg)
 		r.githubScreen = newM.(*GitHubModel)
 		if r.githubScreen.done {
-			r.screen = screenMenu
-			r.menu = NewMenuModel()
-			r.menu.exitOnSelect = false
-			r.githubScreen = nil
-			return r, r.menu.Init()
+			return r.startTransition(rootPendingGitHubToMenu)
 		}
 		return r, cmd
 
@@ -264,11 +413,7 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newM, cmd := r.configScreen.Update(msg)
 		r.configScreen = newM.(*ConfigModel)
 		if r.configScreen.done {
-			r.screen = screenMenu
-			r.menu = NewMenuModel()
-			r.menu.exitOnSelect = false
-			r.configScreen = nil
-			return r, r.menu.Init()
+			return r.startTransition(rootPendingConfigToMenu)
 		}
 		return r, cmd
 
@@ -314,6 +459,10 @@ func (r RootModel) View() string {
 		content = r.configScreen.ViewContent()
 	default:
 		return ""
+	}
+
+	if r.transPhase != transitionIdle {
+		content = applyRootTransitionAlpha(content, r.transAlpha)
 	}
 
 	// RootModel is the only place applying alignment/centering.

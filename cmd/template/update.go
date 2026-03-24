@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jamt29/structify/internal/config"
 	tmpl "github.com/jamt29/structify/internal/template"
 	"github.com/spf13/cobra"
 )
@@ -43,18 +44,27 @@ var updateCmd = &cobra.Command{
 		}
 
 		var updated, skipped, failed int
+		structured := config.UseStructuredLogOut(cmd.OutOrStdout())
 
 		for _, t := range templates {
 			name := filepath.Base(t.Path)
 			if t.Meta == nil || strings.TrimSpace(t.Meta.SourceURL) == "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  → '%s' skipped — not installed from GitHub\n", name)
+				if structured {
+					tmplStructuredLog(cmd).Info("template skipped — not installed from GitHub", "name", name)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "  → '%s' skipped — not installed from GitHub\n", name)
+				}
 				skipped++
 				continue
 			}
 
 			ref, err := tmpl.ParseGitHubURL(t.Meta.SourceURL)
 			if err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "  → '%s' skipped — invalid source URL %q: %v\n", name, t.Meta.SourceURL, err)
+				if structured {
+					tmplStructuredLog(cmd).Warn("template skipped — invalid source URL", "name", name, "url", t.Meta.SourceURL, "err", err)
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  → '%s' skipped — invalid source URL %q: %v\n", name, t.Meta.SourceURL, err)
+				}
 				skipped++
 				continue
 			}
@@ -65,7 +75,11 @@ var updateCmd = &cobra.Command{
 				displaySource = fmt.Sprintf("%s@%s", t.Meta.SourceURL, t.Meta.SourceRef)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "  → Updating '%s' from %s...\n", name, displaySource)
+			if structured {
+				tmplStructuredLog(cmd).Info("Updating template", "name", name, "source", displaySource)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "  → Updating '%s' from %s...\n", name, displaySource)
+			}
 
 			if updateDryRun {
 				updated++
@@ -73,16 +87,28 @@ var updateCmd = &cobra.Command{
 			}
 
 			if err := updateSingleTemplate(cmd, client, t, ref); err != nil {
-				fmt.Fprintf(cmd.ErrOrStderr(), "  ✗ '%s' update failed: %v\n", name, err)
+				if structured {
+					tmplStructuredLog(cmd).Error("template update failed", "name", name, "err", err)
+				} else {
+					fmt.Fprintf(cmd.ErrOrStderr(), "  ✗ '%s' update failed: %v\n", name, err)
+				}
 				failed++
 				continue
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "  ✓ '%s' updated successfully\n", name)
+			if structured {
+				tmplStructuredLog(cmd).Info("template updated", "name", name)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "  ✓ '%s' updated successfully\n", name)
+			}
 			updated++
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "%d updated, %d skipped.\n", updated, skipped)
+		if structured {
+			tmplStructuredLog(cmd).Info("update summary", "updated", updated, "skipped", skipped)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "%d updated, %d skipped.\n", updated, skipped)
+		}
 
 		if failed > 0 {
 			return fmt.Errorf("%d template updates failed", failed)
@@ -141,5 +167,3 @@ func updateSingleTemplate(cmd *cobra.Command, client githubClient, t *tmpl.Templ
 
 	return nil
 }
-
-

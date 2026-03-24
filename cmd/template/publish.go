@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
 	"github.com/spf13/cobra"
 )
@@ -22,18 +23,33 @@ var publishCmd = &cobra.Command{
 
 		manifestPath := filepath.Join(dir, "scaffold.yaml")
 		out := cmd.OutOrStdout()
+		structured := config.UseStructuredLogOut(out)
+		wln := func(s string) {
+			if structured {
+				tmplStructuredLog(cmd).Info(s)
+			} else {
+				fmt.Fprintln(out, s)
+			}
+		}
+		wf := func(format string, args ...interface{}) {
+			if structured {
+				tmplStructuredLog(cmd).Info(fmt.Sprintf(format, args...))
+			} else {
+				fmt.Fprintf(out, format, args...)
+			}
+		}
 
 		// 1) scaffold.yaml exists
 		exists := true
 		if _, err := os.Stat(manifestPath); err != nil {
 			if os.IsNotExist(err) {
-				fmt.Fprintln(out, "[✗] scaffold.yaml exists")
+				wln("[✗] scaffold.yaml exists")
 				exists = false
 			} else {
 				return fmt.Errorf("stat scaffold.yaml: %w", err)
 			}
 		} else {
-			fmt.Fprintln(out, "[✓] scaffold.yaml exists")
+			wln("[✓] scaffold.yaml exists")
 		}
 
 		// 2) scaffold.yaml is valid
@@ -42,18 +58,18 @@ var publishCmd = &cobra.Command{
 		if exists {
 			m, err := dsl.LoadManifest(manifestPath)
 			if err != nil {
-				fmt.Fprintf(out, "[✗] scaffold.yaml is valid (%v)\n", err)
+				wf("[✗] scaffold.yaml is valid (%v)\n", err)
 			} else {
 				if verrs := dsl.ValidateManifest(m); len(verrs) > 0 {
-					fmt.Fprintln(out, "[✗] scaffold.yaml is valid (validation errors present)")
+					wln("[✗] scaffold.yaml is valid (validation errors present)")
 				} else {
-					fmt.Fprintf(out, "[✓] scaffold.yaml is valid (%d inputs, %d steps)\n", len(m.Inputs), len(m.Steps))
+					wf("[✓] scaffold.yaml is valid (%d inputs, %d steps)\n", len(m.Inputs), len(m.Steps))
 					valid = true
 					manifest = m
 				}
 			}
 		} else {
-			fmt.Fprintln(out, "[✗] scaffold.yaml is valid (missing file)")
+			wln("[✗] scaffold.yaml is valid (missing file)")
 		}
 
 		// 3) README exists
@@ -69,9 +85,9 @@ var publishCmd = &cobra.Command{
 			}
 		}
 		if readmeOK {
-			fmt.Fprintln(out, "[✓] README.md exists")
+			wln("[✓] README.md exists")
 		} else {
-			fmt.Fprintln(out, "[✗] README.md is missing — add documentation for your template")
+			wln("[✗] README.md is missing — add documentation for your template")
 		}
 
 		// 4) template/ has files
@@ -97,9 +113,9 @@ var publishCmd = &cobra.Command{
 			}
 		}
 		if hasFiles {
-			fmt.Fprintln(out, "[✓] template/ directory has files")
+			wln("[✓] template/ directory has files")
 		} else {
-			fmt.Fprintln(out, "[✗] template/ directory has no files")
+			wln("[✗] template/ directory has no files")
 		}
 
 		// 5) version is reasonable
@@ -107,20 +123,20 @@ var publishCmd = &cobra.Command{
 		if manifest != nil {
 			v := strings.TrimSpace(manifest.Version)
 			if v == "" || v == "0.0.0" {
-				fmt.Fprintln(out, "[✗] version field looks default — consider bumping before publishing")
+				wln("[✗] version field looks default — consider bumping before publishing")
 				versionOK = false
 			} else {
-				fmt.Fprintf(out, "[✓] version field is %q\n", v)
+				wf("[✓] version field is %q\n", v)
 			}
 		} else {
-			fmt.Fprintln(out, "[✗] version field cannot be checked (invalid manifest)")
+			wln("[✗] version field cannot be checked (invalid manifest)")
 			versionOK = false
 		}
 
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, "To share your template, push it to a public GitHub repo.")
-		fmt.Fprintln(out, "Others can then install it with:")
-		fmt.Fprintln(out, "  structify template add github.com/<your-user>/<repo-name>")
+		wln("")
+		wln("To share your template, push it to a public GitHub repo.")
+		wln("Others can then install it with:")
+		wln("  structify template add github.com/<your-user>/<repo-name>")
 
 		// Critical failures affect exit code.
 		if !exists || !valid || !hasFiles {
@@ -135,4 +151,3 @@ var publishCmd = &cobra.Command{
 func init() {
 	Cmd.AddCommand(publishCmd)
 }
-

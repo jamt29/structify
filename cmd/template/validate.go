@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
 	"github.com/spf13/cobra"
 )
@@ -66,14 +67,25 @@ var validateCmd = &cobra.Command{
 		}
 
 		out := cmd.OutOrStdout()
+		structured := config.UseStructuredLogOut(out)
 		if len(verrs) == 0 {
-			fmt.Fprintln(out, "✓ Template is valid")
-			fmt.Fprintf(out, "Inputs: %d, Steps: %d, File rules: %d\n", len(m.Inputs), len(m.Steps), len(m.Files))
+			if structured {
+				log := tmplStructuredLog(cmd)
+				log.Info("Template is valid")
+				log.Info("manifest summary", "inputs", len(m.Inputs), "steps", len(m.Steps), "file_rules", len(m.Files))
+			} else {
+				fmt.Fprintln(out, "✓ Template is valid")
+				fmt.Fprintf(out, "Inputs: %d, Steps: %d, File rules: %d\n", len(m.Inputs), len(m.Steps), len(m.Files))
+			}
 			return nil
 		}
 
 		for _, ve := range verrs {
-			fmt.Fprintf(out, "- %s: %s\n", ve.Field, ve.Message)
+			if structured {
+				tmplStructuredLog(cmd).Error("validation error", "field", ve.Field, "message", ve.Message)
+			} else {
+				fmt.Fprintf(out, "- %s: %s\n", ve.Field, ve.Message)
+			}
 		}
 		return fmt.Errorf("template has %d validation error(s)", len(verrs))
 	},
@@ -100,6 +112,3 @@ func printValidateJSON(w io.Writer, res validateResult) error {
 	enc.SetIndent("", "  ")
 	return enc.Encode(res)
 }
-
-
-

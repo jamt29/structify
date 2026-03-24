@@ -13,8 +13,8 @@ import (
 
 	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
-	"github.com/jamt29/structify/internal/tui"
 	"github.com/jamt29/structify/internal/template"
+	"github.com/jamt29/structify/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -192,16 +192,25 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("writing template/.gitkeep: %w", err)
 		}
 
-		title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")).Render(
-			fmt.Sprintf("✓ Template '%s' created at %s", name, destDir),
-		)
-		fmt.Println(title)
-		fmt.Println()
-		fmt.Println(lipgloss.NewStyle().Bold(true).Render("Next steps"))
-		fmt.Println("  1. Add your files to: " + filepath.ToSlash(filepath.Join(destDir, "template")) + "/")
-		fmt.Println("  2. Edit scaffold.yaml to add inputs and steps")
-		fmt.Println("  3. Test it: structify template validate " + filepath.ToSlash(destDir) + "/")
-		fmt.Println("  4. Use it: structify new --template " + name)
+		if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+			log := tmplStructuredLog(cmd)
+			log.Info("Template created", "name", name, "path", destDir)
+			log.Info("Next: add files under template/", "dir", filepath.ToSlash(filepath.Join(destDir, "template"))+"/")
+			log.Info("Next: edit scaffold.yaml for inputs and steps")
+			log.Info("Next: validate", "cmd", "structify template validate "+filepath.ToSlash(destDir)+"/")
+			log.Info("Next: use template", "cmd", "structify new --template "+name)
+		} else {
+			title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10")).Render(
+				fmt.Sprintf("✓ Template '%s' created at %s", name, destDir),
+			)
+			fmt.Println(title)
+			fmt.Println()
+			fmt.Println(lipgloss.NewStyle().Bold(true).Render("Next steps"))
+			fmt.Println("  1. Add your files to: " + filepath.ToSlash(filepath.Join(destDir, "template")) + "/")
+			fmt.Println("  2. Edit scaffold.yaml to add inputs and steps")
+			fmt.Println("  3. Test it: structify template validate " + filepath.ToSlash(destDir) + "/")
+			fmt.Println("  4. Use it: structify new --template " + name)
+		}
 
 		return nil
 	},
@@ -246,4 +255,3 @@ steps: []
 	}
 	return nil
 }
-

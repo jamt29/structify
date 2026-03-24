@@ -96,4 +96,3 @@ func TestRemove_BuiltinTemplate_Errors(t *testing.T) {
 		t.Fatalf("expected error when removing non-local or builtin template")
 	}
 }
-

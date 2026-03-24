@@ -81,4 +81,3 @@ func TestPublish_NoTemplateFiles_Fails(t *testing.T) {
 		t.Fatalf("expected no files message, got: %q", out)
 	}
 }
-

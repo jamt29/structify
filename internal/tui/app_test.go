@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"testing"
 	"strings"
+	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/jamt29/structify/internal/dsl"
@@ -77,6 +77,41 @@ func TestStateTransition_InputsToDone(t *testing.T) {
 	_, _ = app.Update(msgScaffoldDone{result: &template.ScaffoldResult{}})
 	if app.state != stateDone {
 		t.Fatalf("expected done state, got %v", app.state)
+	}
+}
+
+func TestStateDone_KeyQuitsOnlyWhenTopLevel(t *testing.T) {
+	tpl := &template.Template{
+		Manifest: &dsl.Manifest{Name: "t"},
+	}
+	app, err := newApp([]*template.Template{tpl}, engine.New())
+	if err != nil {
+		t.Fatalf("newApp error: %v", err)
+	}
+	app.state = stateDone
+
+	// Default path (embedded under RootModel): mark done, don't quit.
+	_, cmd := app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !app.done {
+		t.Fatalf("expected app.done=true")
+	}
+	if cmd != nil {
+		t.Fatalf("expected nil cmd when quitOnDoneKey=false")
+	}
+
+	// Top-level RunApp path: mark done and quit.
+	app2, err := newApp([]*template.Template{tpl}, engine.New())
+	if err != nil {
+		t.Fatalf("newApp error: %v", err)
+	}
+	app2.state = stateDone
+	app2.quitOnDoneKey = true
+	_, cmd2 := app2.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !app2.done {
+		t.Fatalf("expected app2.done=true")
+	}
+	if cmd2 == nil {
+		t.Fatalf("expected tea.Quit cmd when quitOnDoneKey=true")
 	}
 }
 

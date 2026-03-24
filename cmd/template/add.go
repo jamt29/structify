@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
 	tmpl "github.com/jamt29/structify/internal/template"
 	"github.com/spf13/cobra"
@@ -41,7 +42,11 @@ var addCmd = &cobra.Command{
 		if err := tmpl.Add(source); err != nil {
 			return fmt.Errorf("adding local template: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Template added from %s\n", source)
+		if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+			tmplStructuredLog(cmd).Info("Template added", "source", source)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Template added from %s\n", source)
+		}
 		return nil
 	},
 }
@@ -59,7 +64,11 @@ func runAddFromGit(cmd *cobra.Command, client githubClient, ref *tmpl.GitHubRef)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	fmt.Fprintf(cmd.OutOrStdout(), "  → Fetching template from github.com/%s/%s...\n", ref.Owner, ref.Repo)
+	if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+		tmplStructuredLog(cmd).Info("Fetching template from GitHub", "owner", ref.Owner, "repo", ref.Repo)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "  → Fetching template from github.com/%s/%s...\n", ref.Owner, ref.Repo)
+	}
 
 	if err := client.Clone(ref, tmpDir); err != nil {
 		return err
@@ -118,10 +127,15 @@ func runAddFromGit(cmd *cobra.Command, client githubClient, ref *tmpl.GitHubRef)
 		return fmt.Errorf("writing template metadata: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "  ✓ Found: %s (%s / %s)\n", m.Name, m.Language, m.Architecture)
-	fmt.Fprintf(cmd.OutOrStdout(), "  ✓ Template '%s' installed successfully\n", localName)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Run: structify new --template %s\n", localName)
+	if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+		log := tmplStructuredLog(cmd)
+		log.Info("template metadata", "name", m.Name, "language", m.Language, "architecture", m.Architecture)
+		log.Info("Template installed", "localName", localName)
+		log.Info("Run structify new", "template", localName)
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "  ✓ Found: %s (%s / %s)\n", m.Name, m.Language, m.Architecture)
+		fmt.Fprintf(cmd.OutOrStdout(), "  ✓ Template '%s' installed successfully\n", localName)
+		fmt.Fprintf(cmd.OutOrStdout(), "  Run: structify new --template %s\n", localName)
+	}
 	return nil
 }
-
-

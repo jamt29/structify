@@ -7,4 +7,3 @@ func TestCmdIsDefined(t *testing.T) {
 		t.Fatalf("expected Cmd to be defined")
 	}
 }
-

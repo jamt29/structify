@@ -101,4 +101,3 @@ func TestInfo_ResolveError_Propagated(t *testing.T) {
 		t.Fatalf("expected underlying error message, got: %v", err)
 	}
 }
-

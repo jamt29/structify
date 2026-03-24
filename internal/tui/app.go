@@ -69,6 +69,10 @@ type App struct {
 	engine *engine.Engine
 	width  int
 	height int
+
+	// quitOnDoneKey is enabled when App runs as top-level program (RunApp),
+	// so any key at stateDone/stateError exits bubbletea immediately.
+	quitOnDoneKey bool
 }
 
 // Done retorna true cuando el usuario presionó cualquier tecla en stateDone/stateError.
@@ -101,6 +105,7 @@ func RunApp(templates []*tmpl.Template, eng *engine.Engine) error {
 	if err != nil {
 		return err
 	}
+	m.quitOnDoneKey = true
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	final, err := p.Run()
 	if err != nil {
@@ -193,6 +198,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return a, tea.Quit
 			}
 			a.done = true
+			if a.quitOnDoneKey {
+				return a, tea.Quit
+			}
 		}
 		return a, nil
 	default:
@@ -418,11 +426,20 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) View() string {
-	return a.ViewContent()
+	content := a.ViewContent()
+	// RunApp() renders App directly (no RootModel). Mirror RootModel.View layout for each state.
+	switch a.state {
+	case stateProgress:
+		return centerContentHorizontal(a.width, content)
+	case stateSelectTemplate, stateInputs, stateConfirm, stateDone, stateError:
+		return centerContent(a.width, a.height, content)
+	default:
+		return centerContentHorizontal(a.width, content)
+	}
 }
 
 // ViewContent returns the raw (non-centered) content of this screen.
-// RootModel is responsible for centering.
+// RootModel and RunApp() apply centering in View() / RootModel.View respectively.
 func (a *App) ViewContent() string {
 	if a.width < 80 || a.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
@@ -958,12 +975,44 @@ func (a *App) buildPartialRequest() (*tmpl.ScaffoldRequest, error) {
 		}
 	}
 
+	pn := previewEffectiveProjectName(a.selected.Manifest, ctx)
+	var outputDir string
+	if cwd, err := os.Getwd(); err == nil {
+		outputDir = filepath.Join(cwd, pn)
+	} else {
+		outputDir = filepath.Join(".", pn)
+	}
+
 	return &tmpl.ScaffoldRequest{
 		Template:  a.selected,
-		OutputDir: a.outputDir(),
+		OutputDir: outputDir,
 		Variables: ctx,
 		DryRun:    true,
 	}, nil
+}
+
+// previewEffectiveProjectName sets ctx["project_name"] for tree preview when it is still empty.
+func previewEffectiveProjectName(manifest *dsl.Manifest, ctx dsl.Context) string {
+	if v, ok := ctx["project_name"]; ok {
+		if s := strings.TrimSpace(fmt.Sprint(v)); s != "" {
+			return s
+		}
+	}
+	for _, in := range manifest.Inputs {
+		if strings.TrimSpace(in.ID) != "project_name" {
+			continue
+		}
+		def, err := ApplyDefault(in, ctx)
+		if err == nil {
+			if s := strings.TrimSpace(def); s != "" {
+				ctx["project_name"] = s
+				return s
+			}
+		}
+		break
+	}
+	ctx["project_name"] = "<project>"
+	return "<project>"
 }
 
 func (a *App) currentWhenContext() dsl.Context {

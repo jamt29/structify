@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/engine"
 	"github.com/jamt29/structify/internal/template"
@@ -78,6 +79,31 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+
+	orig := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	os.Stderr = w
+
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&buf, r)
+		close(done)
+	}()
+
+	fn()
+
+	_ = w.Close()
+	<-done
+	os.Stderr = orig
+	return buf.String()
+}
+
 func TestRunNew_DryRunNonInteractive_Smoke(t *testing.T) {
 	withNonInteractiveConfig(t, true, func() {
 		// Ensure we don't depend on Cobra execution and Bubbletea.
@@ -109,9 +135,9 @@ func TestRunNonInteractive_SkipsAllSteps_Smoke(t *testing.T) {
 		Template: &template.Template{
 			Path: tmp, // no `template/` directory => ProcessFiles is a no-op
 			Manifest: &dsl.Manifest{
-				Name:    "test",
-				Inputs:  nil,
-				Files:   nil,
+				Name:   "test",
+				Inputs: nil,
+				Files:  nil,
 				Steps: []dsl.Step{
 					{
 						Name: "should_skip",
@@ -128,8 +154,8 @@ func TestRunNonInteractive_SkipsAllSteps_Smoke(t *testing.T) {
 
 	eng := engine.New()
 	_ = eng // engine instance is kept for future-proofing; coverage comes from runNonInteractive itself.
-	out := captureStdout(t, func() {
-		res, err := runNonInteractive(req)
+	out := captureStderr(t, func() {
+		res, err := runNonInteractive(req, config.NewLogger(false))
 		if err != nil {
 			t.Fatalf("runNonInteractive returned error: %v", err)
 		}
@@ -138,7 +164,7 @@ func TestRunNonInteractive_SkipsAllSteps_Smoke(t *testing.T) {
 		}
 	})
 	if out == "" {
-		t.Fatalf("expected runNonInteractive to write progress to stdout")
+		t.Fatalf("expected runNonInteractive to write progress to stderr")
 	}
 
 	// Cover failedSteps helper and all observer callbacks too (direct call).
@@ -147,10 +173,9 @@ func TestRunNonInteractive_SkipsAllSteps_Smoke(t *testing.T) {
 		{Name: "b", Error: fmt.Errorf("boom")},
 	})
 
-	obs := printStepObserver{}
+	obs := printStepObserver{log: config.NewLogger(false)}
 	obs.OnStepStart(dsl.Step{Name: "start"}, "echo start")
 	obs.OnStepSkipped(dsl.Step{Name: "skip"})
 	obs.OnStepSuccess(dsl.Step{Name: "ok"}, "out")
 	obs.OnStepFailure(dsl.Step{Name: "fail"}, fmt.Errorf("err"), "out")
 }
-

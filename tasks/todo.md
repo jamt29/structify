@@ -95,4 +95,22 @@
 - [x] Verificación final (`go build ./...`, `go test ./... -cover`)
 - [x] Reporte de cierre en `tasks/V030a-RESULTADO.md`
 
+## V0.3.0b — Preview / Huh / CLI / Root transiciones
+
+- [x] Fix 1 — Raíz del árbol: placeholder `<project>` / default en `buildPartialRequest`
+- [x] Fix 2 — Huh: `WithShowHelp(false)`
+- [x] Fix 3 — `charmbracelet/log` en no-TTY (`new` + `template *` con `UseStructuredLogOut`)
+- [x] Fix 4 — Transiciones fade entre pantallas `RootModel`
+- [x] Verificación (`go build ./...`, `go test ./... -cover`) y `tasks/V030b-RESULTADO.md`
+- [x] Post v0.3.0b — Bug A: `--dry-run` imprime el informe en **stdout** (charm/log en stderr no sustituye el listado)
+- [x] Post v0.3.0b — Bug B: `stateProgress` centrado en horizontal al usar `RunApp` (`App.View` aplica el mismo layout que `RootModel`)
+
+## V0.3.1 — Consolidación
+
+- [x] Tarea 1 — Bug A confirmado/fijado: dry-run visible y redirigible por stdout
+- [x] Tarea 2 — Bug C: salida con tecla en `stateDone/stateError` cuando `RunApp` corre App top-level
+- [x] Tarea 3 — Recuperar cobertura (`internal/config >= 75`, `cmd/template >= 60`)
+- [x] Tarea 4 — Actualizar `tasks/SKILL-workflow.md`, `tasks/SKILL-structify.md`, `tasks/SKILL-dsl.md`
+- [x] Reporte final en `tasks/V031-RESULTADO.md`
+
 

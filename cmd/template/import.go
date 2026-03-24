@@ -9,6 +9,7 @@ import (
 	"golang.org/x/term"
 	"gopkg.in/yaml.v3"
 
+	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
 	tmpl "github.com/jamt29/structify/internal/template"
 	"github.com/spf13/cobra"
@@ -102,12 +103,22 @@ var importCmd = &cobra.Command{
 			return fmt.Errorf("write scaffold.yaml: %w", err)
 		}
 
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Template '%s' creado en %s/\n", name, destRoot)
-		fmt.Fprintf(cmd.OutOrStdout(), "Archivos: %d incluidos, %d ignorados\n", includedCount, ignoredCount)
-		fmt.Fprintf(cmd.OutOrStdout(), "Variables: %s\n", joinVarIDs(selectedVars))
-		fmt.Fprintf(cmd.OutOrStdout(), "Inputs: %d detectados\n", len(manifest.Inputs))
-		fmt.Fprintf(cmd.OutOrStdout(), "Para usarlo:\nstructify new --template %s\n", name)
-		fmt.Fprintf(cmd.OutOrStdout(), "Para editarlo:\nstructify template edit %s\n", name)
+		if config.UseStructuredLogOut(cmd.OutOrStdout()) {
+			log := tmplStructuredLog(cmd)
+			log.Info("Template imported", "name", name, "path", destRoot+"/")
+			log.Info("files", "included", includedCount, "ignored", ignoredCount)
+			log.Info("variables", "ids", joinVarIDs(selectedVars))
+			log.Info("inputs detected", "count", len(manifest.Inputs))
+			log.Info("use template", "cmd", "structify new --template "+name)
+			log.Info("edit template", "cmd", "structify template edit "+name)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "✓ Template '%s' creado en %s/\n", name, destRoot)
+			fmt.Fprintf(cmd.OutOrStdout(), "Archivos: %d incluidos, %d ignorados\n", includedCount, ignoredCount)
+			fmt.Fprintf(cmd.OutOrStdout(), "Variables: %s\n", joinVarIDs(selectedVars))
+			fmt.Fprintf(cmd.OutOrStdout(), "Inputs: %d detectados\n", len(manifest.Inputs))
+			fmt.Fprintf(cmd.OutOrStdout(), "Para usarlo:\nstructify new --template %s\n", name)
+			fmt.Fprintf(cmd.OutOrStdout(), "Para editarlo:\nstructify template edit %s\n", name)
+		}
 		return nil
 	},
 }

@@ -10,5 +10,3 @@ var Cmd = &cobra.Command{
 	Short: "Manage Structify templates",
 	Long:  "Manage Structify templates: list, add, import, create, edit, validate, remove, inspect, update, and publish templates.",
 }
-
-

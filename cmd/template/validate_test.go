@@ -138,4 +138,3 @@ steps: []
 		t.Fatalf("expected JSON with valid true, got: %q", out)
 	}
 }
-

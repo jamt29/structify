@@ -176,7 +176,9 @@ func buildHuhFormWithBindings(inputs []dsl.Input, holder *huhBindingHolder) (*hu
 		groups = append(groups, group)
 	}
 
-	form := huh.NewForm(groups...).WithTheme(structifyHuhTheme())
+	form := huh.NewForm(groups...).
+		WithTheme(structifyHuhTheme()).
+		WithShowHelp(false)
 	return form, nil
 }
 

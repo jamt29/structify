@@ -77,4 +77,3 @@ func TestUpdate_ReclonesFromGitSource(t *testing.T) {
 		t.Fatalf("RunE error: %v", err)
 	}
 }
-
