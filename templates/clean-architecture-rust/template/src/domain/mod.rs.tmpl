@@ -1,3 +1,8 @@
-// Domain layer (stub).
-pub mod placeholder {}
+//! Capa de dominio: contratos del núcleo del negocio.
 
+/// Contrato de repositorio mínimo de referencia.
+#[allow(dead_code)]
+pub trait Repository {
+    /// Busca un registro por identificador.
+    fn find_by_id(&self, id: &str) -> Option<String>;
+}

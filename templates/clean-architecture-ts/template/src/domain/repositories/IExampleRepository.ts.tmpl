@@ -1,5 +1,6 @@
 export interface IExampleRepository {
-  getById(id: string): Promise<string | null>;
+  findById(id: string): Promise<string | null>;
+  findAll(): Promise<string[]>;
   save(id: string, value: string): Promise<void>;
+  delete(id: string): Promise<void>;
 }
-

@@ -4,8 +4,7 @@ import (
 	repo "{{ module_path }}/internal/domain/repository"
 )
 
-// ExampleRepository es un stub sin ORM.
-// Scaffold steps no instalan dependencias extra cuando `orm == "none"`.
+// ExampleRepository es un stub sin ORM cuando `orm == "none"`.
 type ExampleRepository struct{}
 
 func NewRepository() *ExampleRepository {
@@ -23,5 +22,9 @@ func (r *ExampleRepository) Save(id string, value string) error {
 	return nil
 }
 
-var _ repo.{{ project_name | pascal_case }}Repository = (*ExampleRepository)(nil)
+func (r *ExampleRepository) Delete(id string) error {
+	_ = id
+	return nil
+}
 
+var _ repo.Repository = (*ExampleRepository)(nil)

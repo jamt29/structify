@@ -20,8 +20,6 @@ import (
 
 var createOutputPath string
 
-const projectNameValidateRegex = "^[a-zA-Z][a-zA-Z0-9_-]*$"
-
 var createCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Start a wizard to create a new template",
@@ -42,7 +40,7 @@ var createCmd = &cobra.Command{
 					Prompt:   "Template name?",
 					Type:     "string",
 					Required: true,
-					Validate: projectNameValidateRegex,
+					Validate: template.ProjectNameValidateRegex,
 				},
 				{
 					ID:       "description",
@@ -104,7 +102,7 @@ var createCmd = &cobra.Command{
 				return fmt.Errorf("reading name: %w", err)
 			}
 			if err := tui.ValidateInputValue(
-				dsl.Input{ID: "name", Type: "string", Required: true, Validate: projectNameValidateRegex},
+				dsl.Input{ID: "name", Type: "string", Required: true, Validate: template.ProjectNameValidateRegex},
 				name,
 			); err != nil {
 				return fmt.Errorf("invalid value for %q: %w", "name", err)
@@ -168,29 +166,10 @@ var createCmd = &cobra.Command{
 		if strings.TrimSpace(destRoot) == "" {
 			destRoot = template.TemplatesDir()
 		}
-		destDir := filepath.Join(destRoot, name)
-
-		if _, err := os.Stat(destDir); err == nil {
-			return fmt.Errorf("template %q already exists at %s", name, destDir)
-		} else if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("stat template dir %s: %w", destDir, err)
-		}
-
-		if err := os.MkdirAll(destDir, 0o755); err != nil {
-			return fmt.Errorf("creating template dir %s: %w", destDir, err)
-		}
-
-		if err := writeScaffoldYAML(destDir, name, description, language, architecture, author); err != nil {
+		if err := template.CreateMinimalLocalTemplate(destRoot, name, description, language, architecture, author); err != nil {
 			return err
 		}
-
-		templateDir := filepath.Join(destDir, "template")
-		if err := os.MkdirAll(templateDir, 0o755); err != nil {
-			return fmt.Errorf("creating template/ dir: %w", err)
-		}
-		if err := os.WriteFile(filepath.Join(templateDir, ".gitkeep"), []byte{}, 0o644); err != nil {
-			return fmt.Errorf("writing template/.gitkeep: %w", err)
-		}
+		destDir := filepath.Join(destRoot, name)
 
 		if config.UseStructuredLogOut(cmd.OutOrStdout()) {
 			log := tmplStructuredLog(cmd)
@@ -231,27 +210,4 @@ func detectGitUserName() string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
-}
-
-func writeScaffoldYAML(dir, name, description, language, architecture, author string) error {
-	content := fmt.Sprintf(`name: %q
-version: "0.1.0"
-author: %q
-language: %q
-architecture: %q
-description: %q
-inputs:
-  - id: "project_name"
-    prompt: "Project name?"
-    type: string
-    required: true
-    validate: %q
-steps: []
-`, name, author, language, architecture, description, projectNameValidateRegex)
-
-	path := filepath.Join(dir, "scaffold.yaml")
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("writing scaffold.yaml: %w", err)
-	}
-	return nil
 }

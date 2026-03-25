@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"golang.org/x/term"
 
-	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/engine"
 	"github.com/jamt29/structify/internal/template"
 )
@@ -49,7 +48,6 @@ const (
 	rootPendingMenuDefaultReset
 	rootPendingNewToMenu
 	rootPendingTemplatesToMenu
-	rootPendingTemplatesToNew
 	rootPendingGitHubToMenu
 	rootPendingConfigToMenu
 )
@@ -71,10 +69,9 @@ type RootModel struct {
 
 	err error
 
-	transPhase         transitionPhase
-	transAlpha         float64
-	pending            rootPendingKind
-	pendingSelTemplate *template.Template // for rootPendingTemplatesToNew
+	transPhase transitionPhase
+	transAlpha float64
+	pending    rootPendingKind
 }
 
 func NewRootModel(templates []*template.Template, eng *engine.Engine) RootModel {
@@ -110,8 +107,6 @@ func (r RootModel) startTransition(kind rootPendingKind) (tea.Model, tea.Cmd) {
 func (r RootModel) applyPendingTransition() (RootModel, tea.Cmd) {
 	kind := r.pending
 	r.pending = rootPendingNone
-	selTpl := r.pendingSelTemplate
-	r.pendingSelTemplate = nil
 
 	switch kind {
 	case rootPendingMenuNew:
@@ -161,31 +156,6 @@ func (r RootModel) applyPendingTransition() (RootModel, tea.Cmd) {
 		r.menu.exitOnSelect = false
 		r.templatesScreen = nil
 		return r, r.menu.Init()
-
-	case rootPendingTemplatesToNew:
-		app, err := newApp(r.templates, r.engine)
-		if err != nil {
-			r.err = err
-			return r, tea.Quit
-		}
-		app.selected = selTpl
-		app.answers = dsl.Context{}
-		app.prepareInputs()
-		app.state = stateInputs
-		app.done = false
-		app.activeInput = 0
-		app.compactForm = len(app.inputs) <= 3
-
-		r.app = app
-		ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
-		newApp, _ := r.app.Update(ws)
-		r.app = newApp.(*App)
-		if r.templatesScreen != nil {
-			r.templatesScreen.transitionToNew = nil
-			r.templatesScreen.detail = nil
-		}
-		r.screen = screenNew
-		return r, r.app.Init()
 
 	case rootPendingGitHubToMenu:
 		r.screen = screenMenu
@@ -378,9 +348,19 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		newM, cmd := r.templatesScreen.Update(msg)
 		r.templatesScreen = newM.(*TemplatesModel)
 
-		if r.templatesScreen.transitionToNew != nil {
-			r.pendingSelTemplate = r.templatesScreen.transitionToNew
-			return r.startTransition(rootPendingTemplatesToNew)
+		if r.templatesScreen.NeedsReload() {
+			sel := r.templatesScreen.SelectAfterReloadName()
+			r.templatesScreen.ClearReload()
+			all, err := engine.ListAll()
+			if err == nil {
+				r.templates = all
+				r.templatesScreen = NewTemplatesModel(r.templates)
+				if sel != "" {
+					r.templatesScreen.SelectByName(sel)
+				}
+				ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+				r.templatesScreen.Update(ws)
+			}
 		}
 
 		if r.templatesScreen.done {

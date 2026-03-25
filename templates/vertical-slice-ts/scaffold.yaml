@@ -27,3 +27,7 @@ steps:
   - name: "install dev deps"
     run: "npm install -D typescript @types/node"
 
+  - name: "install express types"
+    run: "npm install -D @types/express"
+    when: runtime == "express"
+

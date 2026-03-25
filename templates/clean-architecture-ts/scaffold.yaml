@@ -31,14 +31,15 @@ files:
     when: runtime == "express"
 
 steps:
-  - name: "npm init"
-    run: "npm init -y"
-
   - name: "install runtime"
     run: "npm install {{ runtime }}"
 
   - name: "install dev deps"
     run: "npm install -D typescript @types/node"
+
+  - name: "install express types"
+    run: "npm install -D @types/express"
+    when: runtime == "express"
 
   - name: "install prisma"
     run: "npm install prisma @prisma/client"

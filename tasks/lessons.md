@@ -149,3 +149,8 @@
 - **Contexto:** Tras migrar a Huh se mantuvieron `app.inputs` con `textinput` para tests. `syncLegacyInputsToHuh()` copiaba esos valores a `huhString` antes de cada `huhForm.Update`. El teclado alimenta solo Huh, no el `textinput`, así que el legacy seguía vacío y **pisaba** el texto tecleado; si además se reconstruía el form al detectar cambio, el foco parpadeaba y parecía imposible escribir.
 - **Lección:** Con `huhForm != nil`, no volcar legacy vacío sobre maps que ya reflejan Huh; no reconstruir el form en bucle por ese “cambio”. En Enter, volcar primero `syncFromHuhForm()` y luego fusionar solo lo que aporte el legacy (p. ej. tests con `ti.SetValue`).
 - **Aplicar en:** `internal/tui/app.go` (`updateInputs`, `syncLegacyInputsToHuh`).
+
+### L032 — Built-ins: verificar el pipeline real de generación
+- **Contexto:** Los templates podían compilar pero el código no usaba capas generadas (p. ej. HTTP en `main` vs `internal/transport/http`) o el scaffold ejecutaba `npm init -y` tras escribir `package.json`.
+- **Lección:** Tras cada cambio en `.tmpl`/`scaffold.yaml`, regenerar en `/tmp` y ejecutar el toolchain del lenguaje (`go`/`tsc`/`cargo`); para Node, revisar el orden de steps respecto a `package.json` embebido.
+- **Aplicar en:** `templates/*/`, `templates/*/scaffold.yaml`

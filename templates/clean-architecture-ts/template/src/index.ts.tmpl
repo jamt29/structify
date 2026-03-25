@@ -1,21 +1,9 @@
 const runtime = "{{ runtime }}";
 
-function healthPayload() {
-  return { status: "ok" };
-}
-
 if (runtime === "express") {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const express = require("express");
-  const app = express();
-
-  app.get("/health", (_req: any, res: any) => res.json(healthPayload()));
-
-  const port = Number(process.env.PORT ?? "3000");
-  app.listen(port, () => {
-    // eslint-disable-next-line no-console
-    console.log(`HTTP listening on http://localhost:${port}/health`);
-  });
+  const { start } = require("./http/server");
+  start();
 } else {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const fastify = require("fastify");
@@ -23,12 +11,11 @@ if (runtime === "express") {
   const app = fastify({ logger: true });
   const port = Number(process.env.PORT ?? "3000");
 
-  app.get("/health", async () => healthPayload());
+  app.get("/health", async () => ({ status: "ok" }));
 
-  app.listen({ port, host: "0.0.0.0" }).catch((err: any) => {
+  app.listen({ port, host: "0.0.0.0" }).catch((err: unknown) => {
     // eslint-disable-next-line no-console
     console.error(err);
     process.exit(1);
   });
 }
-

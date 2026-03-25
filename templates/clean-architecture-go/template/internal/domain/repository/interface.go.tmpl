@@ -1,9 +1,8 @@
 package repository
 
-// {{ project_name | pascal_case }}Repository is an example repository interface.
-// Implementations are provided as stubs for different ORMs via scaffold.yaml `when:` rules.
-type {{ project_name | pascal_case }}Repository interface {
+// Repository define operaciones CRUD básicas de ejemplo para la capa de dominio.
+type Repository interface {
 	GetByID(id string) (string, error)
 	Save(id string, value string) error
+	Delete(id string) error
 }
-

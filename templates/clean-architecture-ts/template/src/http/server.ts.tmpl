@@ -1,7 +1,7 @@
+import express from "express";
 import { registerRoutes } from "./routes";
 
-export function start() {
-  const express = require("express");
+export function start(): void {
   const app = express();
 
   registerRoutes(app);
@@ -12,4 +12,3 @@ export function start() {
     console.log(`HTTP listening on http://localhost:${port}/health`);
   });
 }
-

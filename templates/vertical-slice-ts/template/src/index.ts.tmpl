@@ -19,13 +19,12 @@ if (runtime === "express") {
   const fastify = require("fastify");
   const app = fastify({ logger: true });
 
-  registerHealthRoutes(app);
+  app.get("/health", async () => ({ status: "ok" }));
 
   const port = Number(process.env.PORT ?? "3000");
-  app.listen({ port, host: "0.0.0.0" }).catch((err: any) => {
+  app.listen({ port, host: "0.0.0.0" }).catch((err: unknown) => {
     // eslint-disable-next-line no-console
     console.error(err);
     process.exit(1);
   });
 }
-

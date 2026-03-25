@@ -48,6 +48,24 @@ steps:
 	}
 }
 
+func TestParseManifest_Valid(t *testing.T) {
+	y := `
+name: "t"
+version: "1.0.0"
+author: "me"
+language: "go"
+architecture: "clean"
+description: "d"
+`
+	m, err := ParseManifest([]byte(y))
+	if err != nil {
+		t.Fatalf("ParseManifest: %v", err)
+	}
+	if m.Name != "t" {
+		t.Fatalf("name: %q", m.Name)
+	}
+}
+
 func TestLoadManifest_FileNotFound(t *testing.T) {
 	_, err := LoadManifest("/does/not/exist/scaffold.yaml")
 	if err == nil {

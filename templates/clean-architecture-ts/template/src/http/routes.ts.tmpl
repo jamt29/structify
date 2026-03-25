@@ -1,4 +1,7 @@
-export function registerRoutes(app: any) {
-  app.get("/health", (_req: any, res: any) => res.json({ status: "ok" }));
-}
+import type { Express, Request, Response } from "express";
 
+export function registerRoutes(app: Express): void {
+  app.get("/health", (_req: Request, res: Response) => {
+    res.json({ status: "ok" });
+  });
+}

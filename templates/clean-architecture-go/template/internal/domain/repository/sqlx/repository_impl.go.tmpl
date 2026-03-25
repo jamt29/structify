@@ -6,8 +6,7 @@ import (
 	repo "{{ module_path }}/internal/domain/repository"
 )
 
-// ExampleRepository es un stub que implementa el contrato del repositorio.
-// Scaffold steps instalan github.com/jmoiron/sqlx cuando `orm == "sqlx"`.
+// ExampleRepository implementa el contrato del repositorio con sqlx.
 type ExampleRepository struct {
 	db *sqlx.DB
 }
@@ -27,5 +26,9 @@ func (r *ExampleRepository) Save(id string, value string) error {
 	return nil
 }
 
-var _ repo.{{ project_name | pascal_case }}Repository = (*ExampleRepository)(nil)
+func (r *ExampleRepository) Delete(id string) error {
+	_ = id
+	return nil
+}
 
+var _ repo.Repository = (*ExampleRepository)(nil)

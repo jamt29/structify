@@ -5,9 +5,11 @@ import (
 	nethttp "net/http"
 )
 
-// HealthHandler responde OK con un JSON simple.
+// HealthHandler responde con estado del servicio y nombre del proyecto.
 func HealthHandler(w nethttp.ResponseWriter, _ *nethttp.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	_ = json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"service": "{{ project_name }}",
+	})
 }
-

@@ -2,24 +2,39 @@ mod application;
 mod domain;
 mod infrastructure;
 
-fn main() {
-	let transport = "{{ transport }}";
-	println!(
-		"{{ project_name | pascal_case }} (transport: {})",
-		transport
-	);
+use axum::{routing::get, Json, Router};
+use serde::Serialize;
 
-	match transport {
-		"none" => {
-			println!("No transport selected; domain/application/infrastructure stubs only.");
-		}
-		"axum" => {
-			println!("axum transport selected (stub).");
-		}
-		"actix" => {
-			println!("actix transport selected (stub).");
-		}
-		_ => unreachable!(),
-	}
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
 }
 
+async fn health() -> Json<HealthResponse> {
+    Json(HealthResponse { status: "ok" })
+}
+
+#[tokio::main]
+async fn main() {
+    let transport = "{{ transport }}";
+
+    match transport {
+        "axum" => run_axum().await,
+        "actix" => {
+            println!("actix transport selected; use axum for the built-in HTTP server in this template.");
+        }
+        "none" => {
+            println!("No transport selected; domain/application/infrastructure modules are available as stubs.");
+        }
+        _ => unreachable!(),
+    }
+}
+
+async fn run_axum() {
+    let app = Router::new().route("/health", get(health));
+
+    let addr = "0.0.0.0:3000";
+    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
+    println!("HTTP listening on http://localhost:3000/health");
+    axum::serve(listener, app).await.expect("serve");
+}
