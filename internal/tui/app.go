@@ -253,17 +253,6 @@ func (a *App) updateInputs(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			a.state = stateSelectTemplate
 			return a, nil
-		case "enter":
-			// Tests pueden rellenar app.inputs[].ti; Huh es la fuente de verdad en runtime.
-			if a.huhForm != nil {
-				a.syncFromHuhForm()
-			}
-			_ = a.syncLegacyInputsToHuh()
-			if ctx, err := a.buildContextFromHuh(); err == nil && len(ctx) > 0 {
-				a.answers = ctx
-				a.state = stateConfirm
-				return a, nil
-			}
 		}
 	}
 
@@ -854,15 +843,25 @@ func (a *App) buildContextFromHuh() (dsl.Context, error) {
 		}
 		switch strings.ToLower(strings.TrimSpace(in.Type)) {
 		case "bool":
-			if a.huhBool[id] {
-				answers[id] = "true"
-			} else {
-				answers[id] = "false"
+			if v, ok := a.huhBool[id]; ok {
+				if v {
+					answers[id] = "true"
+				} else {
+					answers[id] = "false"
+				}
 			}
 		case "multiselect":
-			answers[id] = strings.Join(a.huhMulti[id], ",")
+			if v, ok := a.huhMulti[id]; ok {
+				answers[id] = strings.Join(v, ",")
+			}
 		default:
-			answers[id] = strings.TrimSpace(a.huhString[id])
+			if v, ok := a.huhString[id]; ok {
+				v = strings.TrimSpace(v)
+				// Empty values from Huh should not override DSL defaults.
+				if v != "" {
+					answers[id] = v
+				}
+			}
 		}
 	}
 	return BuildContext(a.selected.Manifest.Inputs, answers)

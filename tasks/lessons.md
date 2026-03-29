@@ -184,3 +184,13 @@
 - **Contexto:** Los templates podían compilar pero el código no usaba capas generadas (p. ej. HTTP en `main` vs `internal/transport/http`) o el scaffold ejecutaba `npm init -y` tras escribir `package.json`.
 - **Lección:** Tras cada cambio en `.tmpl`/`scaffold.yaml`, regenerar en `/tmp` y ejecutar el toolchain del lenguaje (`go`/`tsc`/`cargo`); para Node, revisar el orden de steps respecto a `package.json` embebido.
 - **Aplicar en:** `templates/*/`, `templates/*/scaffold.yaml`
+
+### L039 — Verificación de CLI en `./bin`: reconstruir binario antes de pruebas manuales
+- **Contexto:** `go test`/`go build ./...` validan el código fuente, pero las pruebas manuales de comandos (`./bin/structify ...`) pueden ejecutar un binario desactualizado.
+- **Lección:** Cuando la verificación incluye `./bin/structify`, reconstruir explícitamente con `go build -o ./bin/structify ./cmd/structify` justo antes de correr comandos manuales.
+- **Aplicar en:** cierres de iteración con validación manual en `tasks/Vxxx-RESULTADO.md`.
+
+### L040 — Huh: no sobrescribir defaults con respuestas vacías
+- **Contexto:** En `new` vía TUI, `buildContextFromHuh` enviaba `""` para inputs string/enum no tocados; eso anulaba defaults del DSL (incluyendo interpolados como `module_path`) y podía romper `steps` con `exit status 1`.
+- **Lección:** Al construir contexto desde Huh, solo incluir respuestas string/enum/path cuando tengan contenido; si están vacías, omitirlas para que `BuildContext` aplique defaults y validaciones correctamente.
+- **Aplicar en:** `internal/tui/app.go` (`buildContextFromHuh`) y tests de regresión en `internal/tui/app_test.go`.

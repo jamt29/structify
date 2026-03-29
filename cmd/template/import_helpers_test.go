@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jamt29/structify/internal/dsl"
 	"github.com/jamt29/structify/internal/template"
 )
 
@@ -79,11 +80,20 @@ func TestImportHelperFunctions(t *testing.T) {
 		t.Fatalf("expected non-ignored path")
 	}
 
-	manifestGo := buildImportedManifest("n", "go", []template.DetectedVar{{ID: "module_path", Description: "Module", Type: "string", SuggestAs: "github.com/acme/n"}})
+	manifestGo := buildImportedManifest("n", &template.AnalysisResult{
+		ProjectName: "n",
+		Language:    "go",
+		SuggestedInputs: []template.SuggestedInput{
+			{Input: dsl.Input{ID: "orm", Prompt: "ORM?", Type: "enum", Options: []string{"gorm", "sqlx", "none"}, Default: "gorm"}},
+		},
+	}, []template.DetectedVar{{ID: "module_path", Description: "Module", Type: "string", SuggestAs: "github.com/acme/n"}})
 	if len(manifestGo.Steps) == 0 {
 		t.Fatalf("expected go steps")
 	}
-	manifestRust := buildImportedManifest("n", "rust", nil)
+	if manifestGo.Version != "0.1.0" {
+		t.Fatalf("expected version 0.1.0, got %q", manifestGo.Version)
+	}
+	manifestRust := buildImportedManifest("n", &template.AnalysisResult{ProjectName: "n", Language: "rust"}, nil)
 	if len(manifestRust.Steps) == 0 {
 		t.Fatalf("expected rust steps")
 	}

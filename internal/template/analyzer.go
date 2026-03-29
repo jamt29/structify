@@ -1,12 +1,15 @@
 package template
 
 import (
+	"encoding/json"
 	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/jamt29/structify/internal/dsl"
 )
 
 type AnalysisResult struct {
@@ -17,6 +20,9 @@ type AnalysisResult struct {
 	FilesToInclude []string
 	FilesToIgnore  []string
 	TotalFiles     int
+	DetectedDeps   []DetectedDependency
+	SuggestedInputs []SuggestedInput
+	Confidence     float64
 }
 
 type DetectedVar struct {
@@ -31,6 +37,18 @@ type Occurrence struct {
 	File    string
 	Line    int
 	Context string
+}
+
+type DetectedDependency struct {
+	Name    string
+	Alias   string
+	Purpose string
+}
+
+type SuggestedInput struct {
+	Input   dsl.Input
+	Reason  string
+	Default string
 }
 
 func AnalyzeProject(path string) (*AnalysisResult, error) {
@@ -118,6 +136,10 @@ func AnalyzeProject(path string) (*AnalysisResult, error) {
 		vars = append(vars, moduleVar)
 	}
 
+	deps, suggested, extraVars := detectByLanguage(abs, lang)
+	vars = append(vars, extraVars...)
+	confidence := calculateConfidence(lang, vars, deps, totalFiles)
+
 	return &AnalysisResult{
 		ProjectName:    projectName,
 		Language:       lang,
@@ -126,7 +148,328 @@ func AnalyzeProject(path string) (*AnalysisResult, error) {
 		FilesToInclude: include,
 		FilesToIgnore:  uniqueSorted(append(ignore, defaultIgnoreDisplay()...)),
 		TotalFiles:     totalFiles,
+		DetectedDeps:   deps,
+		SuggestedInputs: suggested,
+		Confidence:     confidence,
 	}, nil
+}
+
+func detectByLanguage(root, lang string) ([]DetectedDependency, []SuggestedInput, []DetectedVar) {
+	switch lang {
+	case "go":
+		return detectGoSignals(root)
+	case "typescript":
+		return detectNodeSignals(root)
+	case "rust":
+		return detectRustSignals(root)
+	default:
+		return nil, nil, nil
+	}
+}
+
+func detectGoSignals(root string) ([]DetectedDependency, []SuggestedInput, []DetectedVar) {
+	goModPath := filepath.Join(root, "go.mod")
+	b, err := os.ReadFile(goModPath)
+	if err != nil {
+		return nil, nil, nil
+	}
+	content := string(b)
+	deps := []DetectedDependency{}
+	suggested := []SuggestedInput{}
+	vars := []DetectedVar{}
+
+	goVersionRe := regexp.MustCompile(`(?m)^\s*go\s+([0-9]+\.[0-9]+)\s*$`)
+	if m := goVersionRe.FindStringSubmatch(content); len(m) == 2 {
+		vars = append(vars, DetectedVar{
+			ID:          "go_version",
+			Description: "Go version",
+			Type:        "string",
+			SuggestAs:   m[1],
+		})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{
+				ID:      "go_version",
+				Prompt:  "Go version?",
+				Type:    "string",
+				Default: m[1],
+			},
+			Reason:  "Detectado en go.mod",
+			Default: m[1],
+		})
+	}
+	if strings.Contains(content, "gorm.io/gorm") {
+		deps = append(deps, DetectedDependency{Name: "gorm.io/gorm", Alias: "gorm", Purpose: "ORM"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{
+				ID:      "orm",
+				Prompt:  "ORM?",
+				Type:    "enum",
+				Options: []string{"gorm", "sqlx", "none"},
+				Default: "gorm",
+			},
+			Reason:  "Detectado: gorm.io/gorm",
+			Default: "gorm",
+		})
+	}
+	if strings.Contains(content, "github.com/gin-gonic/gin") {
+		deps = append(deps, DetectedDependency{Name: "github.com/gin-gonic/gin", Alias: "gin", Purpose: "HTTP framework"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{
+				ID:      "transport",
+				Prompt:  "Framework HTTP?",
+				Type:    "enum",
+				Options: []string{"gin", "echo", "fiber", "none"},
+				Default: "gin",
+			},
+			Reason:  "Detectado: gin-gonic/gin",
+			Default: "gin",
+		})
+	}
+	if strings.Contains(content, "github.com/labstack/echo") {
+		deps = append(deps, DetectedDependency{Name: "github.com/labstack/echo", Alias: "echo", Purpose: "HTTP framework"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{
+				ID:      "transport",
+				Prompt:  "Framework HTTP?",
+				Type:    "enum",
+				Options: []string{"gin", "echo", "fiber", "none"},
+				Default: "echo",
+			},
+			Reason:  "Detectado: labstack/echo",
+			Default: "echo",
+		})
+	}
+
+	mainCount := 0
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() || !strings.HasSuffix(path, ".go") {
+			return nil
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr == nil && strings.Contains(string(data), "package main") {
+			mainCount++
+		}
+		return nil
+	})
+	if mainCount > 0 {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{
+				ID:      "is_executable",
+				Prompt:  "Es ejecutable (package main)?",
+				Type:    "bool",
+				Default: true,
+			},
+			Reason:  "Se detecto package main",
+			Default: "true",
+		})
+	}
+	cmdEntries, _ := os.ReadDir(filepath.Join(root, "cmd"))
+	binCount := 0
+	for _, e := range cmdEntries {
+		if e.IsDir() {
+			binCount++
+		}
+	}
+	if binCount > 0 {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{
+				ID:      "binary_count",
+				Prompt:  "Cantidad de binarios en /cmd?",
+				Type:    "string",
+				Default: fmt.Sprintf("%d", binCount),
+			},
+			Reason:  "Detectado por carpetas en /cmd",
+			Default: fmt.Sprintf("%d", binCount),
+		})
+	}
+	return uniqueDeps(deps), dedupeSuggestedInputs(suggested), vars
+}
+
+func detectNodeSignals(root string) ([]DetectedDependency, []SuggestedInput, []DetectedVar) {
+	type pkgJSON struct {
+		Name            string            `json:"name"`
+		Version         string            `json:"version"`
+		Dependencies    map[string]string `json:"dependencies"`
+		DevDependencies map[string]string `json:"devDependencies"`
+		Scripts         map[string]string `json:"scripts"`
+	}
+	var pkg pkgJSON
+	b, err := os.ReadFile(filepath.Join(root, "package.json"))
+	if err != nil || json.Unmarshal(b, &pkg) != nil {
+		return nil, nil, nil
+	}
+	deps := []DetectedDependency{}
+	suggested := []SuggestedInput{}
+	vars := []DetectedVar{}
+
+	if strings.TrimSpace(pkg.Name) != "" {
+		vars = append(vars, DetectedVar{ID: "project_name", Description: "Nombre del proyecto", Type: "string", SuggestAs: pkg.Name})
+	}
+	if strings.TrimSpace(pkg.Version) != "" {
+		vars = append(vars, DetectedVar{ID: "version", Description: "Version", Type: "string", SuggestAs: pkg.Version})
+	}
+	if _, ok := pkg.Dependencies["express"]; ok {
+		deps = append(deps, DetectedDependency{Name: "express", Alias: "express", Purpose: "Node runtime"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "runtime", Prompt: "Runtime Node?", Type: "enum", Options: []string{"express", "fastify", "none"}, Default: "express"},
+			Reason: "Detectado en dependencies.express", Default: "express",
+		})
+	}
+	if _, ok := pkg.Dependencies["fastify"]; ok {
+		deps = append(deps, DetectedDependency{Name: "fastify", Alias: "fastify", Purpose: "Node runtime"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "runtime", Prompt: "Runtime Node?", Type: "enum", Options: []string{"express", "fastify", "none"}, Default: "fastify"},
+			Reason: "Detectado en dependencies.fastify", Default: "fastify",
+		})
+	}
+	if _, ok := pkg.DevDependencies["typescript"]; ok {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "typescript", Prompt: "Usa TypeScript?", Type: "bool", Default: true},
+			Reason: "Detectado en devDependencies.typescript", Default: "true",
+		})
+	}
+	if _, ok := pkg.DevDependencies["jest"]; ok {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "include_tests", Prompt: "Incluir tests?", Type: "bool", Default: true},
+			Reason: "Detectado en devDependencies.jest", Default: "true",
+		})
+	}
+	if _, ok := pkg.DevDependencies["vitest"]; ok {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "include_tests", Prompt: "Incluir tests?", Type: "bool", Default: true},
+			Reason: "Detectado en devDependencies.vitest", Default: "true",
+		})
+	}
+	if _, ok := pkg.Scripts["dev"]; ok {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "has_dev_script", Prompt: "Tiene script dev?", Type: "bool", Default: true},
+			Reason: "Detectado en scripts.dev", Default: "true",
+		})
+	}
+
+	type tsConfig struct {
+		CompilerOptions struct {
+			Strict any    `json:"strict"`
+			OutDir string `json:"outDir"`
+		} `json:"compilerOptions"`
+	}
+	var ts tsConfig
+	if tsB, tsErr := os.ReadFile(filepath.Join(root, "tsconfig.json")); tsErr == nil && json.Unmarshal(tsB, &ts) == nil {
+		if v, ok := ts.CompilerOptions.Strict.(bool); ok && v {
+			suggested = append(suggested, SuggestedInput{
+				Input: dsl.Input{ID: "strict_mode", Prompt: "TypeScript strict mode?", Type: "bool", Default: true},
+				Reason: "Detectado en tsconfig.compilerOptions.strict", Default: "true",
+			})
+		}
+		if strings.TrimSpace(ts.CompilerOptions.OutDir) != "" {
+			suggested = append(suggested, SuggestedInput{
+				Input: dsl.Input{ID: "out_dir", Prompt: "Output directory?", Type: "string", Default: ts.CompilerOptions.OutDir},
+				Reason: "Detectado en tsconfig.compilerOptions.outDir", Default: ts.CompilerOptions.OutDir,
+			})
+		}
+	}
+	return uniqueDeps(deps), dedupeSuggestedInputs(suggested), vars
+}
+
+func detectRustSignals(root string) ([]DetectedDependency, []SuggestedInput, []DetectedVar) {
+	b, err := os.ReadFile(filepath.Join(root, "Cargo.toml"))
+	if err != nil {
+		return nil, nil, nil
+	}
+	content := string(b)
+	deps := []DetectedDependency{}
+	suggested := []SuggestedInput{}
+	vars := []DetectedVar{}
+
+	nameRe := regexp.MustCompile(`(?m)^\s*name\s*=\s*"([^"]+)"\s*$`)
+	versionRe := regexp.MustCompile(`(?m)^\s*version\s*=\s*"([^"]+)"\s*$`)
+	if m := nameRe.FindStringSubmatch(content); len(m) == 2 {
+		vars = append(vars, DetectedVar{ID: "project_name", Description: "Nombre del proyecto", Type: "string", SuggestAs: m[1]})
+	}
+	if m := versionRe.FindStringSubmatch(content); len(m) == 2 {
+		vars = append(vars, DetectedVar{ID: "version", Description: "Version", Type: "string", SuggestAs: m[1]})
+	}
+	if strings.Contains(content, "\n[workspace]") || strings.HasPrefix(strings.TrimSpace(content), "[workspace]") {
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "workspace", Prompt: "Es workspace multi-crate?", Type: "bool", Default: true},
+			Reason: "Detectado bloque [workspace]", Default: "true",
+		})
+	}
+	if strings.Contains(content, "axum") {
+		deps = append(deps, DetectedDependency{Name: "axum", Alias: "axum", Purpose: "HTTP transport"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "transport", Prompt: "Transport layer?", Type: "enum", Options: []string{"axum", "actix", "none"}, Default: "axum"},
+			Reason: "Detectado en Cargo.toml: axum", Default: "axum",
+		})
+	}
+	if strings.Contains(content, "actix-web") {
+		deps = append(deps, DetectedDependency{Name: "actix-web", Alias: "actix", Purpose: "HTTP transport"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "transport", Prompt: "Transport layer?", Type: "enum", Options: []string{"axum", "actix", "none"}, Default: "actix"},
+			Reason: "Detectado en Cargo.toml: actix-web", Default: "actix",
+		})
+	}
+	if strings.Contains(content, "serde") {
+		deps = append(deps, DetectedDependency{Name: "serde", Alias: "serde", Purpose: "Serialization"})
+		suggested = append(suggested, SuggestedInput{
+			Input: dsl.Input{ID: "use_serde", Prompt: "Usar serde?", Type: "bool", Default: true},
+			Reason: "Detectado en Cargo.toml: serde", Default: "true",
+		})
+	}
+	return uniqueDeps(deps), dedupeSuggestedInputs(suggested), vars
+}
+
+func calculateConfidence(lang string, vars []DetectedVar, deps []DetectedDependency, totalFiles int) float64 {
+	score := 0.35
+	if lang != "unknown" {
+		score += 0.25
+	}
+	if len(vars) > 0 {
+		score += 0.2
+	}
+	if len(deps) > 0 {
+		score += 0.15
+	}
+	if totalFiles > 0 {
+		score += 0.05
+	}
+	if score > 1 {
+		score = 1
+	}
+	return score
+}
+
+func uniqueDeps(in []DetectedDependency) []DetectedDependency {
+	seen := map[string]struct{}{}
+	out := make([]DetectedDependency, 0, len(in))
+	for _, d := range in {
+		k := d.Name + "|" + d.Alias + "|" + d.Purpose
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, d)
+	}
+	return out
+}
+
+func dedupeSuggestedInputs(in []SuggestedInput) []SuggestedInput {
+	seen := map[string]int{}
+	out := make([]SuggestedInput, 0, len(in))
+	for _, s := range in {
+		id := strings.TrimSpace(s.Input.ID)
+		if id == "" {
+			continue
+		}
+		if idx, ok := seen[id]; ok {
+			// Prefer the latest signal for defaults like runtime/transport.
+			out[idx] = s
+			continue
+		}
+		seen[id] = len(out)
+		out = append(out, s)
+	}
+	return out
 }
 
 func detectLanguage(root string) (string, error) {

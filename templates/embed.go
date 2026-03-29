@@ -5,12 +5,15 @@ import "embed"
 // Primary templates are embedded by directory.
 // We also embed dotfiles explicitly because go:embed patterns may skip files
 // whose last path segment starts with '.'.
-//go:embed clean-architecture-go vertical-slice-go clean-architecture-ts vertical-slice-ts clean-architecture-rust minimal-go
+//go:embed clean-architecture-go vertical-slice-go clean-architecture-ts vertical-slice-ts clean-architecture-rust minimal-go clean-structure-go
 //go:embed clean-architecture-go/template/.gitignore
 //go:embed vertical-slice-go/template/.gitignore
 //go:embed clean-architecture-ts/template/.gitignore
 //go:embed vertical-slice-ts/template/.gitignore
 //go:embed clean-architecture-rust/template/.gitignore
+//go:embed clean-structure-go/template/.gitignore
+//go:embed clean-structure-go/template/.env.example.tmpl
+//go:embed clean-structure-go/template/.air.toml.tmpl
 //go:embed clean-architecture-go/template/internal/domain/entity/.gitkeep
 //go:embed clean-architecture-go/template/internal/domain/usecase/.gitkeep
 //go:embed clean-architecture-go/template/pkg/.gitkeep

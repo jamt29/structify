@@ -54,15 +54,13 @@ func TestStateTransition_InputsToDone(t *testing.T) {
 		t.Fatalf("expected inputs state, got %v", app.state)
 	}
 
-	if len(app.inputs) == 0 {
-		t.Fatalf("expected at least one input")
+	app.huhString["project_name"] = "my-api"
+	ctx, err := app.buildContextFromHuh()
+	if err != nil {
+		t.Fatalf("buildContextFromHuh error: %v", err)
 	}
-	app.inputs[0].ti.SetValue("my-api")
-
-	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter}) // inputs -> confirm
-	if app.state != stateConfirm {
-		t.Fatalf("expected confirm state, got %v", app.state)
-	}
+	app.answers = ctx
+	app.state = stateConfirm
 
 	_, _ = app.Update(msgScaffoldDone{result: &template.ScaffoldResult{}})
 	if app.state != stateConfirm {
@@ -137,19 +135,18 @@ func TestApp_RenderAndHelpers(t *testing.T) {
 
 	// Select template and prepare inputs.
 	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if len(app.inputs) == 0 {
-		t.Fatalf("expected inputs")
-	}
 	app.width = 120
 	app.height = 40
-	app.inputs[0].ti.SetValue("my-api")
+	app.huhString["project_name"] = "my-api"
 
 	// Render inputs and confirm.
 	_ = app.renderInputs()
-	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if app.state != stateConfirm {
-		t.Fatalf("expected confirm state")
+	ctx, err := app.buildContextFromHuh()
+	if err != nil {
+		t.Fatalf("buildContextFromHuh error: %v", err)
 	}
+	app.answers = ctx
+	app.state = stateConfirm
 	_ = app.renderConfirm()
 
 	// Header / step labels / help text.
@@ -195,4 +192,72 @@ func TestApp_RenderAndHelpers(t *testing.T) {
 	_ = sortedContextPairs(app.answers)
 	_ = padRight("x", 4)
 	_ = max(1, 2)
+}
+
+func TestBuildContextFromHuh_UsesDefaultsWhenEmptyStringAnswers(t *testing.T) {
+	tpl := &template.Template{
+		Manifest: &dsl.Manifest{
+			Name: "clean-structure-go",
+			Inputs: []dsl.Input{
+				{ID: "project_name", Type: "string", Required: true},
+				{ID: "module_path", Type: "string", Default: "github.com/user/{{ project_name | kebab_case }}"},
+				{ID: "http_framework", Type: "enum", Options: []string{"gin", "fiber"}, Default: "gin"},
+				{ID: "sql_database", Type: "enum", Options: []string{"none", "postgres"}, Default: "postgres"},
+			},
+		},
+	}
+	app, err := newApp([]*template.Template{tpl}, engine.New())
+	if err != nil {
+		t.Fatalf("newApp error: %v", err)
+	}
+	app.selected = tpl
+	app.huhString = map[string]string{
+		"project_name":   "prueba",
+		"module_path":    "",
+		"http_framework": "",
+		"sql_database":   "",
+	}
+
+	ctx, err := app.buildContextFromHuh()
+	if err != nil {
+		t.Fatalf("buildContextFromHuh error: %v", err)
+	}
+	if got := strings.TrimSpace(ctxStringMap(ctx, "module_path")); got != "github.com/user/prueba" {
+		t.Fatalf("expected module_path default interpolation, got %q", got)
+	}
+	if got := strings.TrimSpace(ctxStringMap(ctx, "http_framework")); got != "gin" {
+		t.Fatalf("expected enum default for http_framework, got %q", got)
+	}
+	if got := strings.TrimSpace(ctxStringMap(ctx, "sql_database")); got != "postgres" {
+		t.Fatalf("expected enum default for sql_database, got %q", got)
+	}
+}
+
+func TestUpdateInputs_EnterDoesNotSkipHuhForm(t *testing.T) {
+	tpl := &template.Template{
+		Manifest: &dsl.Manifest{
+			Name: "clean-structure-go",
+			Inputs: []dsl.Input{
+				{ID: "project_name", Type: "string", Required: true},
+				{ID: "module_path", Type: "string", Default: "github.com/user/{{ project_name | kebab_case }}"},
+				{ID: "http_framework", Type: "enum", Options: []string{"gin", "fiber"}, Default: "gin"},
+			},
+		},
+	}
+	app, err := newApp([]*template.Template{tpl}, engine.New())
+	if err != nil {
+		t.Fatalf("newApp error: %v", err)
+	}
+	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter}) // select -> inputs
+	if app.state != stateInputs {
+		t.Fatalf("expected inputs state, got %v", app.state)
+	}
+	if app.huhForm == nil {
+		t.Fatalf("expected huh form to be initialized")
+	}
+
+	_, _ = app.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if app.state != stateInputs {
+		t.Fatalf("enter should not skip to confirm while huh form is not completed")
+	}
 }

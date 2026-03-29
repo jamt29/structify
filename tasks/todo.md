@@ -120,4 +120,11 @@
 - [x] Árbol preview: ocultar sufijo `.tmpl` en nombres mostrados
 - [x] `App.ViewContent`: `Align(Left)` + spinner ticks en `stateProgress`; `stateDone` alineación uniforme
 
+## V0.6.1 — Update + Import mejorado
+
+- [x] Feature 1 — `structify update` con `--check`, `--yes`, comparación semver (`isNewer`) y fallback cuando `go` no está en PATH
+- [x] Feature 2 — `template import` con detección estructural extendida (Go/TS/Rust), dependencias detectadas, inputs sugeridos y confianza
+- [x] Verificación final (`go build ./...`, `go test ./...`, `go test ./... -cover`, pruebas manuales de `update` e `import`)
+- [x] Reporte final en `tasks/V061-RESULTADO.md`
+
 

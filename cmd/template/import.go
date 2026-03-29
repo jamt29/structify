@@ -21,9 +21,11 @@ var (
 )
 
 type importReview struct {
-	vars     []tmpl.DetectedVar
-	ignored  []string
-	included []string
+	vars      []tmpl.DetectedVar
+	ignored   []string
+	included  []string
+	suggested []tmpl.SuggestedInput
+	deps      []tmpl.DetectedDependency
 }
 
 var importCmd = &cobra.Command{
@@ -65,16 +67,37 @@ var importCmd = &cobra.Command{
 		}
 
 		review := importReview{
-			vars:     append([]tmpl.DetectedVar{}, analysis.DetectedVars...),
-			ignored:  append([]string{}, analysis.FilesToIgnore...),
-			included: append([]string{}, analysis.FilesToInclude...),
+			vars:      append([]tmpl.DetectedVar{}, analysis.DetectedVars...),
+			ignored:   append([]string{}, analysis.FilesToIgnore...),
+			included:  append([]string{}, analysis.FilesToInclude...),
+			suggested: append([]tmpl.SuggestedInput{}, analysis.SuggestedInputs...),
+			deps:      append([]tmpl.DetectedDependency{}, analysis.DetectedDeps...),
 		}
 		if !importYes && hasTTYImport() {
-			// v0.2.0 keeps review simple: confirmation over detected defaults.
-			fmt.Fprintf(cmd.OutOrStdout(), "structify · Importar template\n")
-			fmt.Fprintf(cmd.OutOrStdout(), "Proyecto detectado: %s\n", analysis.ProjectName)
-			fmt.Fprintf(cmd.OutOrStdout(), "Lenguaje: %s · Archivos: %d · Ignorados: %d\n", analysis.Language, len(review.included), len(review.ignored))
-			fmt.Fprintln(cmd.OutOrStdout(), "Confirmar importación con valores detectados? [Y/n]")
+			fmt.Fprintf(cmd.OutOrStdout(), "structify  ·  Importar template\n")
+			fmt.Fprintf(cmd.OutOrStdout(), "Proyecto: %s\n", analysis.ProjectName)
+			fmt.Fprintf(cmd.OutOrStdout(), "Lenguaje: %s  ·  Archivos: %d  ·  Confianza: %.0f%%\n", analysis.Language, len(review.included), analysis.Confidence*100)
+			fmt.Fprintln(cmd.OutOrStdout(), "Variables detectadas")
+			fmt.Fprintln(cmd.OutOrStdout(), "─────────────────────────────────────────────────────")
+			for _, v := range review.vars {
+				if strings.TrimSpace(v.SuggestAs) == "" {
+					continue
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "[✓] %-15s %-24q (%d ocurrencias)\n", v.ID, v.SuggestAs, len(v.Occurrences))
+			}
+			if len(review.suggested) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "Inputs sugeridos por dependencias detectadas")
+				fmt.Fprintln(cmd.OutOrStdout(), "─────────────────────────────────────────────────────")
+				for _, s := range review.suggested {
+					fmt.Fprintf(cmd.OutOrStdout(), "[✓] %-15s default: %-10s (%s)\n", s.Input.ID, s.Default, s.Reason)
+				}
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Archivos a ignorar (por defecto)")
+			fmt.Fprintln(cmd.OutOrStdout(), "─────────────────────────────────────────────────────")
+			for _, ignored := range review.ignored {
+				fmt.Fprintf(cmd.OutOrStdout(), "[✓] %s\n", ignored)
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), "Confirmar importacion con valores detectados? [Y/n]")
 			var answer string
 			fmt.Fscanln(cmd.InOrStdin(), &answer)
 			answer = strings.ToLower(strings.TrimSpace(answer))
@@ -101,7 +124,7 @@ var importCmd = &cobra.Command{
 			return err
 		}
 
-		manifest := buildImportedManifest(name, analysis.Language, selectedVars)
+		manifest := buildImportedManifest(name, analysis, selectedVars)
 		manifestBytes, err := yaml.Marshal(manifest)
 		if err != nil {
 			return fmt.Errorf("marshal scaffold.yaml: %w", err)
@@ -116,6 +139,7 @@ var importCmd = &cobra.Command{
 			log.Info("files", "included", includedCount, "ignored", ignoredCount)
 			log.Info("variables", "ids", joinVarIDs(selectedVars))
 			log.Info("inputs detected", "count", len(manifest.Inputs))
+			log.Info("suggested deps", "count", len(review.deps))
 			log.Info("use template", "cmd", "structify new --template "+name)
 			log.Info("edit template", "cmd", "structify template edit "+name)
 		} else {
@@ -123,6 +147,7 @@ var importCmd = &cobra.Command{
 			fmt.Fprintf(cmd.OutOrStdout(), "Archivos: %d incluidos, %d ignorados\n", includedCount, ignoredCount)
 			fmt.Fprintf(cmd.OutOrStdout(), "Variables: %s\n", joinVarIDs(selectedVars))
 			fmt.Fprintf(cmd.OutOrStdout(), "Inputs: %d detectados\n", len(manifest.Inputs))
+			fmt.Fprintf(cmd.OutOrStdout(), "Dependencias detectadas: %d\n", len(review.deps))
 			fmt.Fprintf(cmd.OutOrStdout(), "Para usarlo:\nstructify new --template %s\n", name)
 			fmt.Fprintf(cmd.OutOrStdout(), "Para editarlo:\nstructify template edit %s\n", name)
 		}
@@ -245,22 +270,69 @@ func isIgnoredBySet(rel string, ignoredSet map[string]struct{}) bool {
 	return false
 }
 
-func buildImportedManifest(name, lang string, vars []tmpl.DetectedVar) *dsl.Manifest {
+func buildImportedManifest(name string, analysis *tmpl.AnalysisResult, vars []tmpl.DetectedVar) *dsl.Manifest {
+	lang := analysis.Language
 	inputs := make([]dsl.Input, 0, len(vars))
+	seen := map[string]struct{}{}
 	for _, v := range vars {
-		inputs = append(inputs, dsl.Input{
+		if _, ok := seen[v.ID]; ok || strings.TrimSpace(v.ID) == "" {
+			continue
+		}
+		in := dsl.Input{
 			ID:       v.ID,
 			Prompt:   v.Description,
 			Type:     v.Type,
 			Required: true,
 			Default:  v.SuggestAs,
-		})
+		}
+		if v.ID == "project_name" {
+			in.Validate = "^[a-zA-Z][a-zA-Z0-9_-]*$"
+		}
+		inputs = append(inputs, in)
+		seen[v.ID] = struct{}{}
+	}
+	for _, s := range analysis.SuggestedInputs {
+		id := strings.TrimSpace(s.Input.ID)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		in := s.Input
+		if in.Required == false {
+			in.Required = false
+		}
+		inputs = append(inputs, in)
+		seen[id] = struct{}{}
+	}
+
+	if lang == "go" {
+		if _, ok := seen["project_name"]; !ok {
+			inputs = append(inputs, dsl.Input{
+				ID:       "project_name",
+				Prompt:   "Project name?",
+				Type:     "string",
+				Required: true,
+				Validate: "^[a-zA-Z][a-zA-Z0-9_-]*$",
+			})
+			seen["project_name"] = struct{}{}
+		}
+		if _, ok := seen["module_path"]; !ok {
+			inputs = append(inputs, dsl.Input{
+				ID:      "module_path",
+				Prompt:  "Go module path?",
+				Type:    "string",
+				Default: "github.com/user/{{ project_name | kebab_case }}",
+			})
+			seen["module_path"] = struct{}{}
+		}
 	}
 	steps := []dsl.Step{}
 	switch lang {
 	case "go":
 		steps = append(steps,
-			dsl.Step{Name: "Init module", Run: "go mod init {{ module_path }}"},
+			dsl.Step{Name: "Init go module", Run: "go mod init {{ module_path }}"},
 			dsl.Step{Name: "Tidy", Run: "go mod tidy"},
 		)
 	case "typescript", "javascript":
@@ -271,10 +343,10 @@ func buildImportedManifest(name, lang string, vars []tmpl.DetectedVar) *dsl.Mani
 
 	return &dsl.Manifest{
 		Name:         name,
-		Version:      "1.0.0",
+		Version:      "0.1.0",
 		Language:     lang,
 		Architecture: "unknown",
-		Description:  "Imported template",
+		Description:  "Imported from " + analysis.ProjectName,
 		Inputs:       inputs,
 		Steps:        steps,
 	}
