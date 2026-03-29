@@ -175,6 +175,11 @@
 - **Lección:** Hacer `tea.Batch(a.spin.Tick, waitProgressMsg(ch))` (y lo mismo al recibir `msgProgressReady`) para mantener ticks mientras se espera el siguiente paso.
 - **Aplicar en:** `internal/tui/app.go` (`Update` / `updateProgress`).
 
+### L038 — Pantalla Mis templates: ancho del nombre por columna (Local vs Built-in)
+- **Contexto:** `rowLineTwoCol` aplica `lipgloss.MaxWidth(nameW)` al nombre; `nameW` se calculaba como `leftW - metaColWidth() - 2` para **ambas** columnas. La columna Built-in es más ancha (`rightW`), pero el nombre seguía limitado por el ancho local (~9 celdas), y `ansi.Truncate` cortaba strings largos (`clean-architecture-go`, etc.) de forma que parecían nombres corruptos.
+- **Lección:** Calcular `nameWLocal` desde `leftW` y `nameWBuiltin` desde `rightW` por separado; no reutilizar el ancho de nombre pensado solo para la columna izquierda.
+- **Aplicar en:** `internal/tui/templates_screen.go` (`viewContentInner`, `rowLineTwoCol`).
+
 ### L032 — Built-ins: verificar el pipeline real de generación
 - **Contexto:** Los templates podían compilar pero el código no usaba capas generadas (p. ej. HTTP en `main` vs `internal/transport/http`) o el scaffold ejecutaba `npm init -y` tras escribir `package.json`.
 - **Lección:** Tras cada cambio en `.tmpl`/`scaffold.yaml`, regenerar en `/tmp` y ejecutar el toolchain del lenguaje (`go`/`tsc`/`cargo`); para Node, revisar el orden de steps respecto a `package.json` embebido.

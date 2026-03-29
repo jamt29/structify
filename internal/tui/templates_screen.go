@@ -498,18 +498,21 @@ func (m *TemplatesModel) viewContentInner(termW int) string {
 		}
 	}
 
-	nameW := maxInt(8, leftW-m.metaColWidth()-2)
 	metaW := m.metaColWidth()
+	// nameW no puede derivarse solo de leftW: la columna Built-in usa rightW (más ancha)
+	// y comparte rowLineTwoCol; si no, MaxWidth(nameW) trunca nombres largos (p. ej. clean-architecture-*).
+	nameWLocal := maxInt(8, leftW-metaW-2)
+	nameWBuiltin := maxInt(8, rightW-metaW-2)
 
 	localLines := make([]string, 0, len(m.local)+1)
 	for _, t := range m.local {
-		localLines = append(localLines, rowLineTwoCol(t, nameW, metaW))
+		localLines = append(localLines, rowLineTwoCol(t, nameWLocal, metaW))
 	}
 	localLines = append(localLines, "[+] Nuevo template")
 
 	rightLines := make([]string, 0, len(m.builtins))
 	for _, t := range m.builtins {
-		rightLines = append(rightLines, rowLineTwoCol(t, nameW, metaW))
+		rightLines = append(rightLines, rowLineTwoCol(t, nameWBuiltin, metaW))
 	}
 
 	var b strings.Builder
