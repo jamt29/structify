@@ -113,4 +113,11 @@
 - [x] Tarea 4 — Actualizar `tasks/SKILL-workflow.md`, `tasks/SKILL-structify.md`, `tasks/SKILL-dsl.md`
 - [x] Reporte final en `tasks/V031-RESULTADO.md`
 
+## V0.5.0 — UX TUI (post-release)
+
+- [x] Menú: ASCII + opciones centrados como bloque (`JoinVertical(Center)`)
+- [x] Centrado vertical: padding explícito en `centerContent` + fallback si `height`/`width` inválidos
+- [x] Árbol preview: ocultar sufijo `.tmpl` en nombres mostrados
+- [x] `App.ViewContent`: `Align(Left)` + spinner ticks en `stateProgress`; `stateDone` alineación uniforme
+
 

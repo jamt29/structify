@@ -169,5 +169,5 @@ func (m *GitHubModel) ViewContent() string {
 	b.WriteString(stylePending.Render("· docs/template-format.md") + "\n")
 	b.WriteString(stylePending.Render("· github.com/jamt29/structify") + "\n")
 
-	return lipgloss.NewStyle().MaxWidth(MaxWidthGitHub).Render(b.String())
+	return lipgloss.NewStyle().MaxWidth(EffectiveMaxWidth(m.width, MaxWidthGitHub)).Align(lipgloss.Left).Render(b.String())
 }

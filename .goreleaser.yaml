@@ -48,10 +48,3 @@ changelog:
       regexp: '^docs'
       order: 20
 
-brews:
-  - repository:
-      owner: jamt29
-      name: homebrew-structify
-    homepage: "https://github.com/jamt29/structify"
-    description: "Multilenguaje project scaffolding CLI"
-

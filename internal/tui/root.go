@@ -2,13 +2,11 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"golang.org/x/term"
 
 	"github.com/jamt29/structify/internal/engine"
 	"github.com/jamt29/structify/internal/template"
@@ -125,16 +123,25 @@ func (r RootModel) applyPendingTransition() (RootModel, tea.Cmd) {
 	case rootPendingMenuTemplates:
 		r.templatesScreen = NewTemplatesModel(r.templates)
 		r.screen = screenTemplates
+		ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+		newTS, _ := r.templatesScreen.Update(ws)
+		r.templatesScreen = newTS.(*TemplatesModel)
 		return r, r.templatesScreen.Init()
 
 	case rootPendingMenuGitHub:
 		r.githubScreen = NewGitHubModel()
 		r.screen = screenGitHub
+		ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+		newGH, _ := r.githubScreen.Update(ws)
+		r.githubScreen = newGH.(*GitHubModel)
 		return r, r.githubScreen.Init()
 
 	case rootPendingMenuConfig:
 		r.configScreen = NewConfigModel(r.templates)
 		r.screen = screenConfig
+		ws := tea.WindowSizeMsg{Width: r.width, Height: r.height}
+		newCfg, _ := r.configScreen.Update(ws)
+		r.configScreen = newCfg.(*ConfigModel)
 		return r, r.configScreen.Init()
 
 	case rootPendingMenuDefaultReset:
@@ -220,32 +227,34 @@ func applyRootTransitionAlpha(content string, alpha float64) string {
 }
 
 func (r RootModel) Init() tea.Cmd {
-	sizeCmd := initialWindowSizeCmd()
+	// Window size comes from bubbletea (checkResize on the program TTY). Do not
+	// also emit term.GetSize(os.Stdout): it can race and overwrite the real
+	// width/height with a wrong value, breaking lipgloss horizontal centering.
 	switch r.screen {
 	case screenMenu:
-		return tea.Batch(r.menu.Init(), sizeCmd)
+		return r.menu.Init()
 	case screenNew:
 		if r.app != nil {
-			return tea.Batch(r.app.Init(), sizeCmd)
+			return r.app.Init()
 		}
-		return sizeCmd
+		return nil
 	case screenTemplates:
 		if r.templatesScreen != nil {
-			return tea.Batch(r.templatesScreen.Init(), sizeCmd)
+			return r.templatesScreen.Init()
 		}
-		return sizeCmd
+		return nil
 	case screenGitHub:
 		if r.githubScreen != nil {
-			return tea.Batch(r.githubScreen.Init(), sizeCmd)
+			return r.githubScreen.Init()
 		}
-		return sizeCmd
+		return nil
 	case screenConfig:
 		if r.configScreen != nil {
-			return tea.Batch(r.configScreen.Init(), sizeCmd)
+			return r.configScreen.Init()
 		}
-		return sizeCmd
+		return nil
 	default:
-		return sizeCmd
+		return nil
 	}
 }
 
@@ -402,16 +411,6 @@ func (r RootModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func initialWindowSizeCmd() tea.Cmd {
-	return func() tea.Msg {
-		w, h, err := term.GetSize(int(os.Stdout.Fd()))
-		if err != nil || w <= 0 || h <= 0 {
-			return nil
-		}
-		return tea.WindowSizeMsg{Width: w, Height: h}
-	}
-}
-
 func (r RootModel) viewCurrentScreen() string {
 	switch r.screen {
 	case screenMenu:
@@ -425,7 +424,8 @@ func (r RootModel) viewCurrentScreen() string {
 		if r.templatesScreen == nil {
 			return ""
 		}
-		return r.templatesScreen.ViewContent()
+		// Usar r.width/r.height: el centrado aplica esos valores; m.width puede divergir un frame.
+		return r.templatesScreen.ViewContentWithSize(r.width, r.height)
 	case screenGitHub:
 		if r.githubScreen == nil {
 			return ""
@@ -451,15 +451,7 @@ func (r RootModel) centeringMode() CenteringMode {
 		}
 		return AppCenteringMode(r.app.state)
 	case screenTemplates:
-		if r.templatesScreen == nil {
-			return CenterBoth
-		}
-		switch r.templatesScreen.Mode() {
-		case modeList, modeEdit:
-			return CenterHOnly
-		default:
-			return CenterBoth
-		}
+		return CenterBoth
 	case screenGitHub, screenConfig:
 		return CenterBoth
 	default:

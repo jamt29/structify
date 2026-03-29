@@ -215,7 +215,7 @@ func (m *YAMLEditorModel) View() string {
 func (m *YAMLEditorModel) ViewContent() string {
 	if m.saveErr != "" && m.original == "" {
 		s := styleHeader.Render("structify") + "\n\n" + stylePending.Render(m.saveErr) + "\n\n" + styleHelpBar.Render("esc volver")
-		return lipgloss.NewStyle().MaxWidth(MaxWidthEditor).Render(s)
+		return lipgloss.NewStyle().MaxWidth(EffectiveMaxWidth(m.width, MaxWidthEditor)).Align(lipgloss.Left).Render(s)
 	}
 
 	title := "scaffold.yaml"
@@ -230,7 +230,7 @@ func (m *YAMLEditorModel) ViewContent() string {
 
 	if m.confirmForm != nil {
 		b.WriteString(m.confirmForm.View())
-		return lipgloss.NewStyle().MaxWidth(MaxWidthEditor).Render(b.String())
+		return lipgloss.NewStyle().MaxWidth(EffectiveMaxWidth(m.width, MaxWidthEditor)).Align(lipgloss.Left).Render(b.String())
 	}
 
 	box := lipgloss.NewStyle().
@@ -260,5 +260,5 @@ func (m *YAMLEditorModel) ViewContent() string {
 	b.WriteString("\n")
 	b.WriteString(styleHelpBar.Render("ctrl+s guardar  esc salir  (validación al guardar)"))
 	b.WriteString("\n")
-	return lipgloss.NewStyle().MaxWidth(MaxWidthEditor).Render(b.String())
+	return lipgloss.NewStyle().MaxWidth(EffectiveMaxWidth(m.width, MaxWidthEditor)).Align(lipgloss.Left).Render(b.String())
 }

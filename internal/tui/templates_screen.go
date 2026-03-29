@@ -441,13 +441,20 @@ func (m *TemplatesModel) View() string {
 
 // ViewContent returns the raw (non-centered) content of this screen.
 func (m *TemplatesModel) ViewContent() string {
-	if m.width < 80 || m.height < 24 {
-		return stylePending.Render("Terminal too small. Minimum 80x24.")
-	}
-	return lipgloss.NewStyle().MaxWidth(MaxWidthTemplates).Render(m.viewContentInner())
+	return m.ViewContentWithSize(m.width, m.height)
 }
 
-func (m *TemplatesModel) viewContentInner() string {
+// ViewContentWithSize renders using the same dimensions RootModel uses for ApplyScreenCentering
+// so MaxWidth/ column math match lipgloss.PlaceHorizontal(width, …).
+func (m *TemplatesModel) ViewContentWithSize(termW, termH int) string {
+	if termW < 80 || termH < 24 {
+		return stylePending.Render("Terminal too small. Minimum 80x24.")
+	}
+	maxW := EffectiveMaxWidth(termW, MaxWidthTemplates)
+	return lipgloss.NewStyle().MaxWidth(maxW).Align(lipgloss.Left).Render(m.viewContentInner(termW))
+}
+
+func (m *TemplatesModel) viewContentInner(termW int) string {
 	switch m.mode {
 	case modeCreate:
 		if m.createForm != nil {
@@ -477,11 +484,18 @@ func (m *TemplatesModel) viewContentInner() string {
 		return b.String()
 	}
 
-	layoutW := minInt(m.width, MaxWidthTemplates)
+	layoutW := EffectiveMaxWidth(termW, MaxWidthTemplates)
 	leftW := m.localColWidth()
 	rightW := layoutW - leftW - 4
 	if rightW < 28 {
 		rightW = 28
+	}
+	if leftW+rightW > layoutW {
+		rightW = layoutW - leftW
+		if rightW < 12 {
+			leftW = maxInt(12, layoutW-28)
+			rightW = layoutW - leftW
+		}
 	}
 
 	nameW := maxInt(8, leftW-m.metaColWidth()-2)
@@ -545,7 +559,8 @@ func (m *TemplatesModel) viewContentInner() string {
 
 	main := b.String()
 	help := "enter detalle  n nuevo  e editar  d eliminar  esc volver"
-	return m.padHelpBarToBottom(main, help)
+	// No rellenar hasta m.height: eso iguala la altura al terminal y anula el centrado vertical.
+	return main + "\n" + styleHelpBar.Render(help)
 }
 
 func (m *TemplatesModel) localColWidth() int {
@@ -567,17 +582,6 @@ func (m *TemplatesModel) localColWidth() int {
 
 func (m *TemplatesModel) metaColWidth() int {
 	return 24
-}
-
-func (m *TemplatesModel) padHelpBarToBottom(main string, help string) string {
-	helpBar := styleHelpBar.Render(help) + "\n"
-	ch := lipgloss.Height(main)
-	hh := lipgloss.Height(helpBar)
-	pad := m.height - ch - hh - 1
-	if pad < 0 {
-		pad = 0
-	}
-	return main + strings.Repeat("\n", pad) + helpBar
 }
 
 func rowLineTwoCol(t *template.Template, nameW, metaW int) string {

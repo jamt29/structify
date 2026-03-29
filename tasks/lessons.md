@@ -155,6 +155,26 @@
 - **Lección:** Para operaciones de almacén y re-selección tras reload, usar `filepath.Base(template.Path)` como clave estable además de emparejar por `manifest.name` cuando aplique.
 - **Aplicar en:** `internal/tui/templates_screen.go`, `internal/tui/yaml_editor.go`, cualquier llamada a `template.Remove`/`Get` desde el TUI.
 
+### L034 — Centrado TUI: bloque interno vs `lipgloss.Place` y padding vertical
+- **Contexto:** El menú mostraba ASCII art y opciones alineadas a la izquierda mientras la ayuda parecía centrada; en `stateSelectTemplate` el contenido quedaba arriba pese a `centerBoth`.
+- **Lección:** (1) Unir art/tagline/menú con `lipgloss.JoinVertical(lipgloss.Center, …)` para que el bloque sea una unidad antes del `MaxWidth`/`RootModel`. (2) `lipgloss.Place` vertical a veces no coincide con la expectativa; un padding superior explícito `(height - lipgloss.Height(content)) / 2` como `\n` + `PlaceHorizontal` replica el centrado V de forma predecible.
+- **Aplicar en:** `internal/tui/menu.go`, `internal/tui/welcome.go`, `internal/tui/layout.go`.
+
+### L035 — Preview de árbol: nombres de archivo fuente `.tmpl`
+- **Contexto:** El preview listaba `routes.ts.tmpl` porque los segmentos del path venían del template en disco.
+- **Lección:** En el árbol de preview, mostrar el nombre generado (`TrimSuffix(..., ".tmpl")` en nodos hoja), no el nombre del archivo plantilla.
+- **Aplicar en:** `internal/engine/preview.go` (`findOrCreateNode` / `previewDisplayName`).
+
+### L036 — `lipgloss.MaxWidth` sin `Align(Left)` en bloques TUI
+- **Contexto:** En `stateDone` y `stateProgress` algunas líneas cortas (“Steps”, ayuda) parecían centradas dentro del bloque mientras el resto quedaba a la izquierda; el bloque seguía sin sentirse centrado en horizontal respecto a la terminal.
+- **Lección:** Tras `MaxWidth`, fijar `Align(lipgloss.Left)` en el estilo que envuelve todo el `ViewContent()` del `App`, para que `Place`/`PlaceHorizontal` centren **un bloque alineado a la izquierda**, no líneas sueltas centradas dentro del ancho máximo. Evitar doble `MaxWidth` en `renderDone` y en el wrapper.
+- **Aplicar en:** `internal/tui/app.go` (`ViewContent`, `renderDone`).
+
+### L037 — Spinner en `stateProgress` y cola de mensajes
+- **Contexto:** Tras cada `msgStepStart` / `msgFilesDone` solo se encolaba `waitProgressMsg` sin `spinner.Tick`, así el spinner podía dejar de animarse entre mensajes del canal.
+- **Lección:** Hacer `tea.Batch(a.spin.Tick, waitProgressMsg(ch))` (y lo mismo al recibir `msgProgressReady`) para mantener ticks mientras se espera el siguiente paso.
+- **Aplicar en:** `internal/tui/app.go` (`Update` / `updateProgress`).
+
 ### L032 — Built-ins: verificar el pipeline real de generación
 - **Contexto:** Los templates podían compilar pero el código no usaba capas generadas (p. ej. HTTP en `main` vs `internal/transport/http`) o el scaffold ejecutaba `npm init -y` tras escribir `package.json`.
 - **Lección:** Tras cada cambio en `.tmpl`/`scaffold.yaml`, regenerar en `/tmp` y ejecutar el toolchain del lenguaje (`go`/`tsc`/`cargo`); para Node, revisar el orden de steps respecto a `package.json` embebido.

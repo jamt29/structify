@@ -121,14 +121,14 @@ func (m MenuModel) ViewContent() string {
 		items.WriteString("\n")
 	}
 
-	content := strings.Join([]string{
+	block := lipgloss.JoinVertical(lipgloss.Center,
 		WelcomeView(m.width),
 		"",
 		items.String(),
 		"",
 		styleHelpBar.Render(" ↑↓ navegar  enter seleccionar  q salir "),
-	}, "\n")
-	return lipgloss.NewStyle().MaxWidth(MaxWidthMenu).Render(content)
+	)
+	return lipgloss.NewStyle().MaxWidth(EffectiveMaxWidth(m.width, MaxWidthMenu)).Align(lipgloss.Center).Render(block)
 }
 
 func (m MenuModel) SelectedAction() menuAction {

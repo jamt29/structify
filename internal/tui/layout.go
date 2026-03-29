@@ -1,6 +1,23 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"strings"
+
+	"github.com/charmbracelet/lipgloss"
+)
+
+// EffectiveMaxWidth caps a layout max width to the terminal so the widest line is
+// strictly narrower than termWidth. lipgloss.PlaceHorizontal is a no-op when
+// gap := width - contentWidth is <= 0 (e.g. content as wide as the terminal).
+func EffectiveMaxWidth(termWidth, layoutCap int) int {
+	if layoutCap < 1 {
+		layoutCap = 1
+	}
+	if termWidth <= 2 {
+		return layoutCap
+	}
+	return min(layoutCap, termWidth-2)
+}
 
 // CenteringMode selects how RootModel / App place content in the terminal.
 type CenteringMode int
@@ -12,10 +29,28 @@ const (
 )
 
 func centerContent(width int, height int, content string) string {
-	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, content)
+	if width <= 0 || height <= 0 {
+		if width <= 0 {
+			return content
+		}
+		return centerContentHorizontal(width, content)
+	}
+	ch := lipgloss.Height(content)
+	paddingTop := (height - ch) / 2
+	if paddingTop < 0 {
+		paddingTop = 0
+	}
+	if paddingTop == 0 && ch > height {
+		return centerContentHorizontal(width, content)
+	}
+	topPad := strings.Repeat("\n", paddingTop)
+	return centerContentHorizontal(width, topPad+content)
 }
 
 func centerContentHorizontal(width int, content string) string {
+	if width <= 0 {
+		return content
+	}
 	return lipgloss.PlaceHorizontal(width, lipgloss.Center, content)
 }
 
@@ -31,12 +66,7 @@ func ApplyScreenCentering(mode CenteringMode, width, height int, content string)
 	}
 }
 
-// AppCenteringMode matches the screenNew row in the centering table (v0.5.0).
-func AppCenteringMode(s state) CenteringMode {
-	switch s {
-	case stateProgress:
-		return CenterHOnly
-	default:
-		return CenterBoth
-	}
+// AppCenteringMode selects centering for the new-project flow (embedded or RunApp).
+func AppCenteringMode(_ state) CenteringMode {
+	return CenterBoth
 }

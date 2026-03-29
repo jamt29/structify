@@ -67,3 +67,11 @@ ok  	github.com/jamt29/structify/internal/tui	coverage: 28.2% of statements
 - **Store vs manifiesto:** operaciones sobre `~/.structify/templates` deben usar el **nombre de directorio** (`filepath.Base(Path)`), no solo `manifest.name`, o `template.Remove` / re-selección fallan cuando difieren.
 - **Un solo layout:** `ApplyScreenCentering` + `AppCenteringMode` evitan divergencias entre `RootModel` y `RunApp` (L030).
 - **Versión en TUI:** `internal/buildinfo` evita import cycle con `cmd` y unifica welcome, `structify version` y pantalla de configuración.
+
+## Post-fix UX (capturas)
+
+- **Menú:** `WelcomeView` + ítems + ayuda en `lipgloss.JoinVertical(lipgloss.Center, …)`; `centerContent` usa padding vertical explícito + `PlaceHorizontal` (ver L034).
+- **Selector / estados `centerBoth`:** mismo `centerContent` corregido.
+- **Árbol:** `previewDisplayName` quita `.tmpl` en hojas (`internal/engine/preview.go`).
+
+Verificación: `go build ./...` OK; `go test ./... -cover` OK.

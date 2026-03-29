@@ -192,7 +192,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	case msgProgressReady:
 		a.progressCh = m.ch
-		return a, waitProgressMsg(a.progressCh)
+		return a, tea.Batch(a.spin.Tick, waitProgressMsg(a.progressCh))
 	}
 
 	switch a.state {
@@ -402,10 +402,10 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, cmd
 	case msgFilesDone:
 		a.progressLog = append(a.progressLog, progressLine{name: "files", status: "done", command: fmt.Sprintf("Archivos generados (%d archivos)", m.count)})
-		return a, waitProgressMsg(a.progressCh)
+		return a, tea.Batch(a.spin.Tick, waitProgressMsg(a.progressCh))
 	case msgStepStart:
 		a.progressLog = append(a.progressLog, progressLine{name: m.name, status: "running", command: m.command})
-		return a, waitProgressMsg(a.progressCh)
+		return a, tea.Batch(a.spin.Tick, waitProgressMsg(a.progressCh))
 	case msgStepDone:
 		for i := len(a.progressLog) - 1; i >= 0; i-- {
 			if a.progressLog[i].name == m.name && a.progressLog[i].status == "running" {
@@ -417,7 +417,7 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
-		return a, waitProgressMsg(a.progressCh)
+		return a, tea.Batch(a.spin.Tick, waitProgressMsg(a.progressCh))
 	case msgStepError:
 		a.err = m.err
 		a.state = stateError
@@ -454,9 +454,14 @@ func (a *App) ViewContent() string {
 	content := strings.Join([]string{
 		a.renderHeader(),
 		a.renderBody(),
-		styleHelpBar.Render(" " + a.helpText()),
+		styleHelpBar.Render(" "+a.helpText()),
 	}, "\n")
-	return lipgloss.NewStyle().MaxWidth(a.viewMaxWidthForState()).Render(content)
+	maxW := EffectiveMaxWidth(a.width, a.viewMaxWidthForState())
+	st := lipgloss.NewStyle().MaxWidth(maxW).Align(lipgloss.Left)
+	if a.state == stateDone || a.state == stateError {
+		st = st.Padding(0, 2)
+	}
+	return st.Render(content)
 }
 
 func (a *App) viewMaxWidthForState() int {
@@ -476,9 +481,9 @@ func (a *App) viewMaxWidthForState() int {
 	}
 }
 
-// layoutWidthCaps terminal width for split/panels to match MaxWidth(inputs) block.
+// layoutWidthForInputs matches ViewContent width so split panels are not wider than the wrapped block.
 func (a *App) layoutWidthForInputs() int {
-	return min(a.width, MaxWidthInputs)
+	return EffectiveMaxWidth(a.width, MaxWidthInputs)
 }
 
 func (a *App) renderHeader() string {
@@ -660,7 +665,11 @@ func (a *App) renderProgress() string {
 	for _, line := range a.progressLog {
 		switch line.status {
 		case "running":
-			b.WriteString(lipgloss.NewStyle().Foreground(colorActive).Render(a.spin.View()) + " " + styleCompletedValue.Render(line.command) + "\n")
+			cmd := strings.TrimSpace(line.command)
+			if cmd != "" {
+				cmd += "…"
+			}
+			b.WriteString(lipgloss.NewStyle().Foreground(colorActive).Render(a.spin.View()) + " " + styleCompletedValue.Render(cmd) + "\n")
 		case "done":
 			b.WriteString(styleCheckmark.Render("✓ ") + styleCompletedValue.Render(line.command) + "\n")
 		case "skipped":
@@ -679,7 +688,7 @@ func (a *App) renderDone() string {
 	if a.result != nil {
 		b.WriteString(styleCompletedLabel.Render("Ruta     ") + styleCompletedValue.Render(a.outputDir()) + "\n")
 		b.WriteString(styleCompletedLabel.Render("Archivos ") + styleCompletedValue.Render(fmt.Sprintf("%d", len(a.result.FilesCreated))) + "\n\n")
-		b.WriteString(styleCompletedValue.Render("Steps") + "\n")
+		b.WriteString(styleCompletedLabel.Render("Steps") + "\n")
 		for _, s := range a.result.StepsExecuted {
 			cmd := strings.TrimSpace(s.Command)
 			if cmd == "" {
@@ -695,13 +704,12 @@ func (a *App) renderDone() string {
 		}
 	}
 	b.WriteString("\n")
-	b.WriteString(styleCompletedValue.Render("Próximos pasos") + "\n")
+	b.WriteString(styleCompletedLabel.Render("Próximos pasos") + "\n")
 	b.WriteString(stylePending.Render(strings.Repeat("─", 14)) + "\n")
 	for _, line := range nextSteps(a.language(), ctxStringMap(a.answers, "project_name")) {
 		b.WriteString(styleCompletedValue.Render(line) + "\n")
 	}
-	inner := strings.TrimRight(b.String(), "\n")
-	return lipgloss.NewStyle().MaxWidth(MaxWidthDone).Align(lipgloss.Left).Padding(0, 2).Render(inner)
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (a *App) renderError() string {
@@ -1104,7 +1112,7 @@ func (a *App) helpText() string {
 	case stateConfirm:
 		return "enter confirmar  esc volver  ctrl+c salir"
 	case stateProgress:
-		return "(procesando...)"
+		return "ctrl+c cancelar"
 	case stateDone, stateError:
 		return "cualquier tecla para salir"
 	default:

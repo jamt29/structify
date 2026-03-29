@@ -137,7 +137,7 @@ func (m *ConfigModel) ViewContent() string {
 	top.WriteString("\n\n")
 	top.WriteString(body)
 
-	return lipgloss.NewStyle().MaxWidth(MaxWidthConfig).Render(top.String())
+	return lipgloss.NewStyle().MaxWidth(EffectiveMaxWidth(m.width, MaxWidthConfig)).Align(lipgloss.Left).Render(top.String())
 }
 
 func styleErrorText(msg string) string {

@@ -104,9 +104,17 @@ func splitRelPath(relPath string) []string {
 	return strings.Split(clean, "/")
 }
 
+func previewDisplayName(name string, isDir bool) string {
+	if isDir {
+		return name
+	}
+	return strings.TrimSuffix(name, ".tmpl")
+}
+
 func findOrCreateNode(nodes *[]*TreeNode, name string, isDir bool) *TreeNode {
+	display := previewDisplayName(name, isDir)
 	for _, n := range *nodes {
-		if n.Name == name {
+		if n.Name == display {
 			// Keep directory semantics if discovered later.
 			if isDir {
 				n.IsDir = true
@@ -114,7 +122,7 @@ func findOrCreateNode(nodes *[]*TreeNode, name string, isDir bool) *TreeNode {
 			return n
 		}
 	}
-	n := &TreeNode{Name: name, IsDir: isDir}
+	n := &TreeNode{Name: display, IsDir: isDir}
 	*nodes = append(*nodes, n)
 	return n
 }
