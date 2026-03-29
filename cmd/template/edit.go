@@ -15,7 +15,13 @@ import (
 
 var editCmd = &cobra.Command{
 	Use:   "edit <name>",
-	Short: "Edit scaffold.yaml of a local template",
+	Short: "Editar scaffold.yaml de un template local",
+	Long: "Abre scaffold.yaml en tu editor y valida el manifiesto al guardar.\n\n" +
+		"Si hay errores de parseo o validacion, permite re-editar,\n" +
+		"guardar con errores o descartar cambios.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template edit mi-template\n" +
+		"  EDITOR=nano structify template edit mi-template",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.TrimSpace(args[0])

@@ -1,210 +1,381 @@
-# DSL Reference: `scaffold.yaml`
+# DSL Reference - scaffold.yaml
 
-Structify templates are described by a `scaffold.yaml` file.
+Esta referencia describe el DSL de templates de Structify (v0.5.1) para autores de `scaffold.yaml`.
 
-This document explains the user-facing DSL: `inputs`, `files` inclusion rules, `steps`, and the `{{ }}` interpolation system.
-
----
-
-## `scaffold.yaml` structure
+## Estructura completa
 
 ```yaml
-name: "clean-architecture-go"          # Required: template identifier (non-empty)
-version: "1.0.0"                       # Required: SemVer (X.Y.Z)
-author: "your-github-username"        # Required: author text
-language: "go"                        # Required: go | typescript | rust | csharp | python
-architecture: "clean"                 # Recommended: clean | vertical-slice | hexagonal | mvc | monorepo
-description: "..."                    # Required: one-line description
-tags: ["go", "clean", "api"]          # Required: list of tokens for discovery
+# Metadata
+name: "clean-architecture-go"
+version: "1.0.0"
+author: "jamt29"
+language: "go"
+architecture: "clean"
+description: "Clean Architecture para APIs en Go"
+tags: ["go", "clean", "api"]
 
-inputs: []                             # Optional: variables asked to the user
-files: []                              # Optional: include/exclude rules for template files
-steps: []                              # Optional: commands executed after files are generated
-```
-
----
-
-## Inputs
-
-Each `inputs[]` entry declares a variable the template can use:
-
-```yaml
+# Inputs que se preguntan al usuario
 inputs:
   - id: project_name
-    prompt: "Project name?"
-    type: string                # string | enum | bool
+    prompt: "Nombre del proyecto?"
+    type: string
     required: true
-    default: "my-project"      # Optional
-    validate: "^[a-z][a-z0-9-]+$" # Optional regex validation
-    when: transport != "grpc"  # Optional condition (DSL expression)
+    default: "my-api"
+    validate: "^[a-z][a-z0-9-]+$"
 
-  - id: runtime
-    prompt: "Runtime?"
+  - id: transport
+    prompt: "Transporte?"
     type: enum
-    options: [express, fastify]
-    default: express
-```
+    options: [http, grpc]
+    default: http
 
-Input types:
+  - id: orm
+    prompt: "Persistencia?"
+    type: enum
+    options: [gorm, sqlx, none]
+    default: none
+    when: transport == "http"
 
-| type | Meaning | Value in context |
-|---|---|---|
-| `string` | free text | string |
-| `enum` | one of a list | string (chosen option) |
-| `bool` | true/false | boolean |
+  - id: include_docker
+    prompt: "Incluir Docker?"
+    type: bool
+    default: true
 
----
+  - id: features
+    prompt: "Features opcionales"
+    type: multiselect
+    options: [auth, metrics, tracing]
+    default: [auth]
 
-## `when:` expressions (conditions)
+  - id: project_path
+    prompt: "Ruta destino"
+    type: path
+    must_exist: false
 
-`when:` is used in `inputs[]`, `files[]`, and `steps[]`.
+# Variables calculadas
+computed:
+  - id: module_path
+    value: "github.com/acme/{{ project_name | kebab_case }}"
 
-### Operators
-
-| Operator | Meaning |
-|---|---|
-| `==` | equals |
-| `!=` | not equals |
-| `&&` | AND |
-| `||` | OR |
-| `!` | NOT (unary) |
-
-### Parentheses
-
-Use `(expr)` to control precedence.
-
-### Literals and identifiers
-
-- Strings must use double quotes, for example `"http"`.
-- Booleans are `true` and `false`.
-- Identifiers refer to input `id` values, for example `transport` or `use_prisma`.
-
-### Examples
-
-Valid:
-
-```yaml
-when: transport == "http"
-when: orm != "none"
-when: transport == "http" && orm != "none"
-when: (transport == "http" || transport == "grpc") && orm != "none"
-```
-
-Invalid (common mistakes):
-
-```yaml
-when: transport = "http"       # ERROR: use == not =
-when: transport == http        # ERROR: strings need double quotes
-when: use_prisma == "true"    # ERROR: comparing bool with string
-```
-
----
-
-## `files:` rules (include/exclude)
-
-`files[]` controls which paths inside `template/` are copied to the output directory.
-
-Each rule must declare either `include` or `exclude` (not both).
-
-Example:
-
-```yaml
+# Reglas de archivos
 files:
-  - include: "src/http/**"
-    when: runtime == "express"
+  - include: "internal/transport/http/**"
+    when: transport == "http"
 
-  - exclude: "src/experimental/**"
-    when: use_prisma == false
-```
+  - include: "internal/transport/grpc/**"
+    when: transport == "grpc"
 
-Glob patterns:
+  - include: "deploy/docker/**"
+    when: include_docker == true
 
-- Use forward slashes (`/`) in paths.
-- `**` matches zero or more path segments.
-- `*` matches within a single path segment.
+  - include: "internal/feature/auth/**"
+    when: contains(features, "auth")
 
-Rule precedence:
+  - include: "internal/feature/metrics/**"
+    when: contains(features, "metrics")
 
-- When multiple rules match a file, the **last matching rule wins**.
+  - exclude: "internal/db/**"
+    when: orm == "none"
 
----
-
-## `steps:` (post-generation commands)
-
-`steps[]` are executed after files are generated.
-
-```yaml
+# Comandos post-generacion
 steps:
-  - name: "Init go module"
+  - name: "Init module"
     run: "go mod init {{ module_path }}"
+
+  - name: "Add gorm"
+    run: "go get gorm.io/gorm"
+    when: orm == "gorm"
+
+  - name: "Add sqlx"
+    run: "go get github.com/jmoiron/sqlx"
+    when: orm == "sqlx"
 
   - name: "Tidy"
     run: "go mod tidy"
 ```
 
-Each step supports:
-- `name`: human-friendly label (required)
-- `run`: shell command string (required)
-- `when`: optional condition using the DSL expression language
+## Metadata
 
----
+Campos principales de metadata:
 
-## Interpolation in `.tmpl` files: `{{ }}`
+- `name` (requerido): identificador de template.
+- `version` (requerido): formato `X.Y.Z`.
+- `author` (requerido): autor o equipo.
+- `language` (requerido): `go`, `typescript`, `rust`, `csharp`, `python`.
+- `architecture` (opcional): descripcion corta del estilo arquitectonico.
+- `description` (opcional): texto libre.
+- `tags` (opcional): lista de etiquetas.
 
-Files ending in `.tmpl` are rendered with the DSL context.
+## Inputs
 
-Interpolation syntax:
+Cada item de `inputs` define una variable que luego se usa en:
+
+- reglas `when:`
+- comandos `steps[].run`
+- interpolacion de archivos `.tmpl`
+
+Campos comunes por input:
+
+- `id` (requerido): nombre interno, solo `^[a-z_]+$`.
+- `prompt` (recomendado): texto mostrado en TUI.
+- `type` (requerido): tipo del input.
+- `required` (opcional): si es obligatorio cuando el input esta activo.
+- `default` (opcional): valor por defecto.
+- `when` (opcional): condicion para mostrar/pedir ese input.
+- `validate` (opcional): regex para `type: string`.
+
+### Tipo string
+
+Texto libre, con opcion de regex:
+
+```yaml
+- id: project_name
+  prompt: "Nombre del proyecto?"
+  type: string
+  required: true
+  validate: "^[a-z][a-z0-9-]+$"
+```
+
+### Tipo enum
+
+Seleccion de una sola opcion:
+
+```yaml
+- id: transport
+  prompt: "Transporte?"
+  type: enum
+  options: [http, grpc, cli]
+  default: http
+```
+
+### Tipo bool
+
+Valor booleano:
+
+```yaml
+- id: include_ci
+  prompt: "Incluir CI?"
+  type: bool
+  default: true
+```
+
+### Tipo multiselect (nuevo)
+
+Seleccion de multiples opciones.
+
+Internamente el valor queda como `[]string` para usar en `contains(...)`.
+
+```yaml
+- id: features
+  prompt: "Features opcionales"
+  type: multiselect
+  options: [auth, metrics, tracing]
+  default: [auth]
+```
+
+### Tipo path (nuevo)
+
+Ruta de archivo o directorio.
+
+`must_exist` controla validacion de existencia.
+
+```yaml
+- id: output_path
+  prompt: "Ruta de salida"
+  type: path
+  must_exist: true
+```
+
+Comportamiento:
+
+- `must_exist: true` -> falla si la ruta no existe.
+- `must_exist: false` (o ausente) -> no exige existencia.
+
+## Computed variables (nuevo)
+
+`computed` permite crear variables derivadas a partir de otras:
+
+```yaml
+computed:
+  - id: module_path
+    value: "github.com/acme/{{ project_name | kebab_case }}"
+```
+
+Reglas:
+
+- `id` sigue la misma convension de nombres que `inputs[].id`.
+- `value` usa interpolacion `{{ }}`.
+- las computed quedan disponibles para `steps`, `files` y `.tmpl`.
+
+## File rules
+
+`files` controla que partes de `template/` se incluyen o excluyen.
+
+Cada regla debe tener exactamente una de estas claves:
+
+- `include`
+- `exclude`
+
+Ejemplo:
+
+```yaml
+files:
+  - include: "src/http/**"
+    when: transport == "http"
+  - exclude: "src/legacy/**"
+    when: include_legacy == false
+```
+
+Reglas importantes:
+
+- Se usan globs con `/`.
+- `**` matchea cero o mas segmentos.
+- Si varias reglas aplican al mismo path, la ultima regla gana.
+
+## Steps
+
+`steps` define comandos post-generacion.
+
+```yaml
+steps:
+  - name: "Install deps"
+    run: "npm install"
+  - name: "Enable prisma"
+    run: "npm install prisma @prisma/client"
+    when: contains(features, "prisma")
+```
+
+Campos:
+
+- `name` (requerido): etiqueta visible.
+- `run` (requerido): comando shell.
+- `when` (opcional): condicion DSL.
+
+## Expresiones when:
+
+Las expresiones `when:` se usan en:
+
+- `inputs[].when`
+- `files[].when`
+- `steps[].when`
+
+### Operadores
+
+Comparacion:
+
+- `==`
+- `!=`
+
+Logicos:
+
+- `&&`
+- `||`
+- `!`
+
+Agrupacion:
+
+- `( ... )`
+
+Literales:
+
+- strings con comillas dobles (`"http"`)
+- booleanos (`true`, `false`)
+
+### Funcion contains() (nuevo)
+
+La funcion `contains()` devuelve booleano y admite 2 formas:
+
+1. `contains(<string>, <substring>)`
+2. `contains(<[]string>, <item>)` (ideal para `multiselect`)
+
+Ejemplos validos:
+
+```yaml
+when: contains(project_name, "api")
+when: contains(features, "auth")
+when: contains(features, "metrics") && transport == "http"
+```
+
+Errores comunes:
+
+- `contains(features)` -> faltan argumentos
+- `contains(features, true)` -> segundo argumento debe ser string
+- `contains(include_ci, "x")` -> primer argumento debe ser string o []string
+
+### Ejemplos
+
+```yaml
+when: transport == "http"
+when: orm != "none"
+when: !include_docker
+when: transport == "http" && orm == "gorm"
+when: (transport == "http" || transport == "grpc") && include_ci == true
+when: contains(features, "auth")
+```
+
+## Interpolacion {{ }}
+
+Se usa en:
+
+- archivos `.tmpl`
+- strings de `steps[].run`
+- strings de `computed[].value`
+
+Sintaxis:
 
 ```text
 {{ variable }}
-{{ variable | filter }}
+{{ variable | filtro }}
 ```
 
-Supported filters:
+Reglas:
 
-| filter | Input example | Output example |
-|---|---|---|
-| `snake_case` | `MyProject` | `my_project` |
-| `pascal_case` | `my-project` | `MyProject` |
-| `camel_case` | `my-project` | `myProject` |
-| `kebab_case` | `MyProject` | `my-project` |
-| `upper` | `hello` | `HELLO` |
-| `lower` | `HELLO` | `hello` |
+- delimitadores `{{` y `}}`
+- solo un filtro por expresion (sin chaining)
+- si la variable no existe, la renderizacion falla
 
-Rules:
+### Filtros disponibles (tabla)
 
-- Only one filter is supported per interpolation (no chaining).
-- If a variable is not defined, rendering fails with a descriptive error.
+| Filtro | Entrada ejemplo | Salida ejemplo | Uso |
+|---|---|---|---|
+| `snake_case` | `MyProject` | `my_project` | `{{ project_name \| snake_case }}` |
+| `pascal_case` | `my-project` | `MyProject` | `{{ project_name \| pascal_case }}` |
+| `camel_case` | `my-project` | `myProject` | `{{ project_name \| camel_case }}` |
+| `kebab_case` | `MyProject` | `my-project` | `{{ project_name \| kebab_case }}` |
+| `upper` | `hello` | `HELLO` | `{{ env \| upper }}` |
+| `lower` | `HELLO` | `hello` | `{{ env \| lower }}` |
 
-Examples:
+## Errores comunes y como resolverlos
 
-```ts
-export interface {{ project_name | pascal_case }} {
-  id: string;
-}
-```
+1. Operador incorrecto en `when:`
+   - Error tipico: `transport = "http"`
+   - Solucion: usar `==` o `!=`.
 
----
+2. Strings sin comillas dobles
+   - Error tipico: `transport == http`
+   - Solucion: `transport == "http"`.
 
-## Common errors
+3. `enum` o `multiselect` sin `options`
+   - Error tipico: falta de opciones.
+   - Solucion: definir lista `options: [...]`.
 
-1. `when:` uses wrong operator
-   - Symptom: parse error or unexpected evaluation.
-   - Fix: use `==`/`!=` (not `=`).
+4. Variable no definida en interpolacion
+   - Error tipico: `{{ module }}` cuando no existe `module`.
+   - Solucion: revisar `inputs`/`computed` disponibles.
 
-2. Missing double quotes for string literals
-   - Symptom: lexer/parser error.
-   - Fix: use `"http"`, not `http`.
+5. Chaining de filtros
+   - Error tipico: `{{ name | snake_case | upper }}`
+   - Solucion: usar solo un filtro por expresion.
 
-3. Variables not defined
-   - Symptom: `variable 'X' not defined in context`.
-   - Fix: make sure the input `id: X` exists and is active for the current `when` path.
+6. `path` con `must_exist: true` apuntando a ruta inexistente
+   - Error tipico: validacion falla en input.
+   - Solucion: crear la ruta antes o usar `must_exist: false`.
 
-4. `filter chaining is not supported`
-   - Symptom: interpolation error.
-   - Fix: use only one filter: `{{ x | kebab_case }}`.
+7. Ciclos entre `inputs[].when`
+   - Error tipico: A depende de B y B depende de A.
+   - Solucion: romper la dependencia circular y dejar un orden evaluable.
 
-5. Unterminated interpolation (`{{ ...`)
-   - Symptom: `unterminated interpolation starting at position ...`.
-   - Fix: ensure every `{{` has a matching `}}`.
+8. `contains()` con tipos incorrectos
+   - Error tipico: usar bool como primer argumento.
+   - Solucion: primer arg string o `[]string`, segundo arg string.
 

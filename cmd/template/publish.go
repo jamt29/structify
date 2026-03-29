@@ -13,7 +13,13 @@ import (
 
 var publishCmd = &cobra.Command{
 	Use:   "publish [path]",
-	Short: "Run the checklist to publish a template",
+	Short: "Ejecutar checklist de publicacion de template",
+	Long: "Verifica si un template cumple condiciones minimas para publicarse.\n\n" +
+		"Revisa scaffold.yaml, estructura de archivos y recomendaciones de version.\n" +
+		"Los errores criticos devuelven exit code 1.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template publish\n" +
+		"  structify template publish ./mi-template",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		dir := "."

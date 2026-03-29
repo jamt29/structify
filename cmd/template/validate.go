@@ -27,7 +27,13 @@ type validateResult struct {
 
 var validateCmd = &cobra.Command{
 	Use:   "validate <path>",
-	Short: "Validate a template directory or scaffold.yaml file",
+	Short: "Validar un template o archivo scaffold.yaml",
+	Long: "Valida sintaxis y reglas del manifiesto DSL para un template.\n\n" +
+		"Puedes pasar un directorio de template o un archivo scaffold.yaml.\n" +
+		"Con --json devuelve un resultado apto para automatizacion.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template validate ./mi-template\n" +
+		"  structify template validate ./mi-template/scaffold.yaml --json",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		path := strings.TrimSpace(args[0])
@@ -92,7 +98,7 @@ var validateCmd = &cobra.Command{
 }
 
 func init() {
-	validateCmd.Flags().BoolVar(&validateJSON, "json", false, "print validation result as JSON")
+	validateCmd.Flags().BoolVar(&validateJSON, "json", false, "imprimir resultado de validacion en JSON")
 	Cmd.AddCommand(validateCmd)
 }
 

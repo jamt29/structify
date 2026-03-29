@@ -22,7 +22,13 @@ var createOutputPath string
 
 var createCmd = &cobra.Command{
 	Use:   "create",
-	Short: "Start a wizard to create a new template",
+	Short: "Crear un nuevo template con asistente",
+	Long: "Genera la estructura base de un template Structify.\n\n" +
+		"Solicita metadata inicial y crea scaffold.yaml + carpeta template/.\n" +
+		"Puedes usarlo de forma interactiva o con stdin en entornos no TTY.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template create\n" +
+		"  structify template create --output ./templates-locales",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cfg, err := config.Load()
 		if err != nil {
@@ -196,7 +202,7 @@ var createCmd = &cobra.Command{
 }
 
 func init() {
-	createCmd.Flags().StringVar(&createOutputPath, "output", "", "output directory for the new template")
+	createCmd.Flags().StringVar(&createOutputPath, "output", "", "directorio donde se creara el template (default: store local)")
 	Cmd.AddCommand(createCmd)
 }
 

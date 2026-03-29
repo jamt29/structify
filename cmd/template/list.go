@@ -27,7 +27,13 @@ type listTemplate struct {
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List available templates",
+	Short: "Listar templates disponibles",
+	Long: "Lista templates locales y built-in instalados en el entorno actual.\n\n" +
+		"Por defecto muestra salida tabular agrupada por fuente.\n" +
+		"Con --json imprime un arreglo JSON para automatizacion.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template list\n" +
+		"  structify template list --json",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		templates, err := engineListAll()
 		if err != nil {
@@ -119,6 +125,6 @@ func printListJSON(w io.Writer, items []listTemplate) error {
 }
 
 func init() {
-	listCmd.Flags().BoolVar(&listJSON, "json", false, "print templates as JSON")
+	listCmd.Flags().BoolVar(&listJSON, "json", false, "imprimir templates en formato JSON")
 	Cmd.AddCommand(listCmd)
 }

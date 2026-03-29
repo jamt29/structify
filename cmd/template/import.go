@@ -28,7 +28,14 @@ type importReview struct {
 
 var importCmd = &cobra.Command{
 	Use:   "import <source>",
-	Short: "Import a local project or GitHub repo as template",
+	Short: "Crear un template desde un proyecto existente",
+	Long: "Analiza un proyecto existente y genera un template Structify.\n\n" +
+		"<source> puede ser una ruta local o una URL de GitHub.\n" +
+		"El comando detecta lenguaje, variables sugeridas y crea scaffold.yaml base.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template import ./mi-proyecto\n" +
+		"  structify template import github.com/user/existing-project\n" +
+		"  structify template import ./mi-proyecto --name mi-template --yes",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source := strings.TrimSpace(args[0])
@@ -124,8 +131,8 @@ var importCmd = &cobra.Command{
 }
 
 func init() {
-	importCmd.Flags().StringVar(&importName, "name", "", "Nombre del template (default: nombre de carpeta/repo)")
-	importCmd.Flags().BoolVar(&importYes, "yes", false, "Saltar confirmación interactiva")
+	importCmd.Flags().StringVar(&importName, "name", "", "nombre del template de salida (default: nombre de carpeta o repo)")
+	importCmd.Flags().BoolVar(&importYes, "yes", false, "omitir confirmacion interactiva")
 	Cmd.AddCommand(importCmd)
 }
 

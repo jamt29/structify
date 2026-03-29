@@ -21,9 +21,13 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "structify",
-	Short: "Structify scaffolds projects from opinionated templates.",
-	Long: "Structify is a CLI to scaffold projects based on software architectures and languages.\n" +
-		"Choose an architecture and language, then generate a ready-to-extend project structure.",
+	Short: "CLI para scaffold de proyectos con templates opinionados",
+	Long: "Structify genera proyectos base a partir de templates reutilizables.\n" +
+		"Puedes usar el flujo interactivo TUI o comandos por flags para scripts y CI.\n\n" +
+		"Ejemplos:\n" +
+		"  structify\n" +
+		"  structify new --template clean-architecture-go --name my-api\n" +
+		"  structify template list",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return runInteractive()
 	},
@@ -39,8 +43,8 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.structify/config.yaml)")
-	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "enable verbose output")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "ruta al archivo de configuracion (default: $HOME/.structify/config.yaml)")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "habilitar logs detallados")
 
 	rootCmd.AddCommand(templatecmd.Cmd)
 }

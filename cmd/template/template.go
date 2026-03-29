@@ -7,6 +7,12 @@ import (
 // Cmd is the base command for template management: `structify template`.
 var Cmd = &cobra.Command{
 	Use:   "template",
-	Short: "Manage Structify templates",
-	Long:  "Manage Structify templates: list, add, import, create, edit, validate, remove, inspect, update, and publish templates.",
+	Short: "Gestionar templates de Structify",
+	Long: "Administra templates locales, built-in y remotos.\n\n" +
+		"Incluye comandos para listar, instalar, importar, crear, editar,\n" +
+		"validar, eliminar, inspeccionar, actualizar y preparar publicacion.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template list\n" +
+		"  structify template add github.com/user/repo\n" +
+		"  structify template import ./mi-proyecto",
 }

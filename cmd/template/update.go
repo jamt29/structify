@@ -19,7 +19,14 @@ var (
 
 var updateCmd = &cobra.Command{
 	Use:   "update [name]",
-	Short: "Update one or all templates installed from GitHub",
+	Short: "Actualizar templates instalados desde GitHub",
+	Long: "Actualiza uno o todos los templates cuyo origen sea GitHub.\n\n" +
+		"Si no pasas nombre, intenta actualizar todos los templates locales.\n" +
+		"Los que no tengan metadata de origen GitHub se omiten.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template update\n" +
+		"  structify template update mi-template\n" +
+		"  structify template update mi-template --dry-run",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		client := newGitHubClientFn()
@@ -119,7 +126,7 @@ var updateCmd = &cobra.Command{
 }
 
 func init() {
-	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "show what would be updated without changing templates")
+	updateCmd.Flags().BoolVar(&updateDryRun, "dry-run", false, "mostrar que se actualizaria sin modificar templates")
 	Cmd.AddCommand(updateCmd)
 }
 

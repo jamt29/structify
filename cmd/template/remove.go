@@ -15,7 +15,13 @@ var removeYes bool
 
 var removeCmd = &cobra.Command{
 	Use:   "remove <name>",
-	Short: "Remove a local template",
+	Short: "Eliminar un template local",
+	Long: "Elimina un template del store local de Structify.\n\n" +
+		"No permite eliminar templates built-in.\n" +
+		"Por defecto solicita confirmacion interactiva.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template remove mi-template\n" +
+		"  structify template remove mi-template --yes",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.TrimSpace(args[0])
@@ -63,7 +69,7 @@ var removeCmd = &cobra.Command{
 }
 
 func init() {
-	removeCmd.Flags().BoolVarP(&removeYes, "yes", "y", false, "remove without confirmation")
+	removeCmd.Flags().BoolVarP(&removeYes, "yes", "y", false, "eliminar sin pedir confirmacion")
 	Cmd.AddCommand(removeCmd)
 }
 

@@ -24,7 +24,14 @@ type githubClient interface {
 
 var addCmd = &cobra.Command{
 	Use:   "add <source>",
-	Short: "Add a template from a local path or GitHub repository",
+	Short: "Instalar un template desde ruta local o GitHub",
+	Long: "Instala un template en el store local de Structify.\n\n" +
+		"<source> puede ser una ruta local o una URL de GitHub\n" +
+		"(por ejemplo github.com/user/repo o github.com/user/repo@v1.2.0).\n\n" +
+		"Ejemplos:\n" +
+		"  structify template add ./mi-template\n" +
+		"  structify template add github.com/user/repo\n" +
+		"  structify template add github.com/user/repo@v1.2.0 --name mi-template",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		source := args[0]
@@ -50,8 +57,8 @@ var addCmd = &cobra.Command{
 }
 
 func init() {
-	addCmd.Flags().BoolVar(&addForce, "force", false, "overwrite existing template with the same name")
-	addCmd.Flags().StringVar(&addName, "name", "", "local name to use for the installed template (defaults to repository name)")
+	addCmd.Flags().BoolVar(&addForce, "force", false, "sobrescribir template local existente con el mismo nombre")
+	addCmd.Flags().StringVar(&addName, "name", "", "nombre local para guardar el template instalado (default: nombre del repo)")
 	Cmd.AddCommand(addCmd)
 }
 

@@ -11,7 +11,13 @@ import (
 
 var infoCmd = &cobra.Command{
 	Use:   "info <name>",
-	Short: "Show detailed information about a template",
+	Short: "Mostrar detalle de un template",
+	Long: "Muestra metadata, inputs y steps de un template por nombre.\n\n" +
+		"Sirve para inspeccionar rapidamente como se comporta un template\n" +
+		"antes de usarlo en `structify new`.\n\n" +
+		"Ejemplos:\n" +
+		"  structify template info clean-architecture-go\n" +
+		"  structify template info mi-template",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := strings.TrimSpace(args[0])

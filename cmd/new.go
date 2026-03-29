@@ -28,20 +28,25 @@ var (
 
 var newCmd = &cobra.Command{
 	Use:   "new",
-	Short: "Create a new project from a template",
-	Long: "Create a new project from a Structify template.\n" +
-		"Use flags to select the template, project name, additional variables, and output directory.",
+	Short: "Crear un nuevo proyecto desde un template",
+	Long: "Crea la estructura base de un proyecto a partir de un template instalado.\n\n" +
+		"Con TTY disponible, puedes usar el flujo interactivo.\n" +
+		"Con flags, funciona en modo no interactivo para scripts y CI.\n\n" +
+		"Ejemplos:\n" +
+		"  structify new\n" +
+		"  structify new --template clean-architecture-go --name my-api\n" +
+		"  structify new --template clean-architecture-go --name my-api --var transport=http --dry-run",
 	RunE: runNew,
 }
 
 func init() {
 	rootCmd.AddCommand(newCmd)
 
-	newCmd.Flags().StringVar(&newTemplate, "template", "", "template name or path to use")
-	newCmd.Flags().StringVar(&newName, "name", "", "name of the project to create")
-	newCmd.Flags().StringArrayVar(&newVars, "var", nil, "additional variables in key=value form (repeatable)")
-	newCmd.Flags().BoolVar(&newDryRun, "dry-run", false, "show what would be generated without writing files")
-	newCmd.Flags().StringVar(&newOutput, "output", "", "output directory for the generated project")
+	newCmd.Flags().StringVar(&newTemplate, "template", "", "nombre o ruta del template a usar")
+	newCmd.Flags().StringVar(&newName, "name", "", "nombre del proyecto (project_name)")
+	newCmd.Flags().StringArrayVar(&newVars, "var", nil, "variables adicionales en formato key=value (repetible)")
+	newCmd.Flags().BoolVar(&newDryRun, "dry-run", false, "mostrar que se generaria sin escribir archivos")
+	newCmd.Flags().StringVar(&newOutput, "output", "", "directorio de salida del proyecto generado")
 }
 
 func runNew(cmd *cobra.Command, args []string) error {
