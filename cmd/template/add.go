@@ -2,10 +2,8 @@ package template
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/dsl"
@@ -14,8 +12,8 @@ import (
 )
 
 var (
-	addForce        bool
-	addName         string
+	addForce bool
+	addName  string
 	newGitHubClient = tmpl.NewGitHubClient
 )
 
@@ -58,73 +56,28 @@ func init() {
 }
 
 func runAddFromGit(cmd *cobra.Command, client githubClient, ref *tmpl.GitHubRef) error {
-	tmpDir, err := os.MkdirTemp("", "structify-template-add-*")
-	if err != nil {
-		return fmt.Errorf("creating temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
 	if config.UseStructuredLogOut(cmd.OutOrStdout()) {
 		tmplStructuredLog(cmd).Info("Fetching template from GitHub", "owner", ref.Owner, "repo", ref.Repo)
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "  → Fetching template from github.com/%s/%s...\n", ref.Owner, ref.Repo)
 	}
 
-	if err := client.Clone(ref, tmpDir); err != nil {
+	if err := tmpl.InstallFromGitHub(client, ref, tmpl.InstallFromGitHubOptions{
+		Force:     addForce,
+		LocalName: addName,
+	}); err != nil {
 		return err
 	}
 
-	manifestPath := filepath.Join(tmpDir, "scaffold.yaml")
-	m, err := dsl.LoadManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("loading scaffold.yaml from cloned repo: %w", err)
-	}
-	if verrs := dsl.ValidateManifest(m); len(verrs) > 0 {
-		return fmt.Errorf("cloned template is invalid")
-	}
-
-	name := m.Name
-	if name == "" {
-		return fmt.Errorf("cloned template has empty name in manifest")
-	}
-
-	localName := addName
-	if strings.TrimSpace(localName) == "" {
+	localName := strings.TrimSpace(addName)
+	if localName == "" {
 		localName = ref.Repo
 	}
 
-	templatesRoot := tmpl.TemplatesDir()
-	if err := os.MkdirAll(templatesRoot, 0o755); err != nil {
-		return fmt.Errorf("creating templates dir %s: %w", templatesRoot, err)
-	}
-
-	destDir := filepath.Join(templatesRoot, localName)
-	if _, err := os.Stat(destDir); err == nil {
-		if !addForce {
-			return fmt.Errorf("template %q already exists (use --force to overwrite)", localName)
-		}
-		if err := os.RemoveAll(destDir); err != nil {
-			return fmt.Errorf("removing existing template %q: %w", localName, err)
-		}
-	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("stat destination %s: %w", destDir, err)
-	}
-
-	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("creating destination dir %s: %w", destDir, err)
-	}
-
-	if err := tmpl.CopyDirForTest(tmpDir, destDir); err != nil {
-		return fmt.Errorf("copying cloned template to store: %w", err)
-	}
-
-	meta := &tmpl.TemplateMeta{
-		SourceURL:   fmt.Sprintf("github.com/%s/%s", ref.Owner, ref.Repo),
-		SourceRef:   ref.Ref,
-		InstalledAt: time.Now().UTC().Format(time.RFC3339),
-	}
-	if err := tmpl.WriteTemplateMeta(destDir, meta); err != nil {
-		return fmt.Errorf("writing template metadata: %w", err)
+	manifestPath := filepath.Join(tmpl.TemplatesDir(), localName, "scaffold.yaml")
+	m, err := dsl.LoadManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("loading installed manifest: %w", err)
 	}
 
 	if config.UseStructuredLogOut(cmd.OutOrStdout()) {

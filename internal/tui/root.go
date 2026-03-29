@@ -412,65 +412,70 @@ func initialWindowSizeCmd() tea.Cmd {
 	}
 }
 
-func (r RootModel) View() string {
-	var content string
+func (r RootModel) viewCurrentScreen() string {
 	switch r.screen {
 	case screenMenu:
-		content = r.menu.ViewContent()
+		return r.menu.ViewContent()
 	case screenNew:
 		if r.app == nil {
 			return ""
 		}
-		content = r.app.ViewContent()
+		return r.app.ViewContent()
 	case screenTemplates:
 		if r.templatesScreen == nil {
 			return ""
 		}
-		content = r.templatesScreen.ViewContent()
+		return r.templatesScreen.ViewContent()
 	case screenGitHub:
 		if r.githubScreen == nil {
 			return ""
 		}
-		content = r.githubScreen.ViewContent()
+		return r.githubScreen.ViewContent()
 	case screenConfig:
 		if r.configScreen == nil {
 			return ""
 		}
-		content = r.configScreen.ViewContent()
+		return r.configScreen.ViewContent()
 	default:
 		return ""
 	}
+}
 
+func (r RootModel) centeringMode() CenteringMode {
+	switch r.screen {
+	case screenMenu:
+		return CenterBoth
+	case screenNew:
+		if r.app == nil {
+			return CenterHOnly
+		}
+		return AppCenteringMode(r.app.state)
+	case screenTemplates:
+		if r.templatesScreen == nil {
+			return CenterBoth
+		}
+		switch r.templatesScreen.Mode() {
+		case modeList, modeEdit:
+			return CenterHOnly
+		default:
+			return CenterBoth
+		}
+	case screenGitHub, screenConfig:
+		return CenterBoth
+	default:
+		return CenterBoth
+	}
+}
+
+func (r RootModel) View() string {
+	if r.width == 0 || r.height == 0 {
+		return ""
+	}
+	content := r.viewCurrentScreen()
 	if r.transPhase != transitionIdle {
 		content = applyRootTransitionAlpha(content, r.transAlpha)
 	}
-
-	// RootModel is the only place applying alignment/centering.
-	switch r.screen {
-	case screenMenu:
-		return centerContent(r.width, r.height, content)
-	case screenTemplates, screenNew:
-		// Default for these screens: horizontal-only.
-		switch r.screen {
-		case screenTemplates:
-			return centerContentHorizontal(r.width, content)
-		case screenNew:
-			if r.app == nil {
-				return centerContentHorizontal(r.width, content)
-			}
-			switch r.app.state {
-			case stateProgress:
-				return centerContentHorizontal(r.width, content)
-			case stateSelectTemplate, stateInputs, stateConfirm, stateDone, stateError:
-				return centerContent(r.width, r.height, content)
-			default:
-				return centerContentHorizontal(r.width, content)
-			}
-		}
-	}
-
-	// screenGitHub/screenConfig: center both.
-	return centerContent(r.width, r.height, content)
+	return ApplyScreenCentering(r.centeringMode(), r.width, r.height, content)
 }
 
 // Run lanza la sesión TUI completa (welcome + menú + sub-pantallas).

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 var ErrMenuExit = errors.New("menu exited")
@@ -127,7 +128,7 @@ func (m MenuModel) ViewContent() string {
 		"",
 		styleHelpBar.Render(" ↑↓ navegar  enter seleccionar  q salir "),
 	}, "\n")
-	return content
+	return lipgloss.NewStyle().MaxWidth(MaxWidthMenu).Render(content)
 }
 
 func (m MenuModel) SelectedAction() menuAction {

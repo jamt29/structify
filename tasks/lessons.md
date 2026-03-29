@@ -150,6 +150,11 @@
 - **Lección:** Con `huhForm != nil`, no volcar legacy vacío sobre maps que ya reflejan Huh; no reconstruir el form en bucle por ese “cambio”. En Enter, volcar primero `syncFromHuhForm()` y luego fusionar solo lo que aporte el legacy (p. ej. tests con `ti.SetValue`).
 - **Aplicar en:** `internal/tui/app.go` (`updateInputs`, `syncLegacyInputsToHuh`).
 
+### L033 — TUI: clave del store local vs nombre del manifiesto
+- **Contexto:** Los templates locales viven en `~/.structify/templates/<carpeta>/`; `template.Get`/`Remove` usan ese segmento, mientras que la UI muestra `manifest.name`, que puede no coincidir.
+- **Lección:** Para operaciones de almacén y re-selección tras reload, usar `filepath.Base(template.Path)` como clave estable además de emparejar por `manifest.name` cuando aplique.
+- **Aplicar en:** `internal/tui/templates_screen.go`, `internal/tui/yaml_editor.go`, cualquier llamada a `template.Remove`/`Get` desde el TUI.
+
 ### L032 — Built-ins: verificar el pipeline real de generación
 - **Contexto:** Los templates podían compilar pero el código no usaba capas generadas (p. ej. HTTP en `main` vs `internal/transport/http`) o el scaffold ejecutaba `npm init -y` tras escribir `package.json`.
 - **Lección:** Tras cada cambio en `.tmpl`/`scaffold.yaml`, regenerar en `/tmp` y ejecutar el toolchain del lenguaje (`go`/`tsc`/`cargo`); para Node, revisar el orden de steps respecto a `package.json` embebido.

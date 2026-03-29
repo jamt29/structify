@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -107,6 +108,9 @@ func (m *TemplatesModel) rebuildRows() {
 
 func (m *TemplatesModel) Init() tea.Cmd { return nil }
 
+// Mode returns the active templates screen mode (for RootModel centering).
+func (m *TemplatesModel) Mode() templatesMode { return m.mode }
+
 func (m *TemplatesModel) NeedsReload() bool { return m.needsReload }
 
 func (m *TemplatesModel) ClearReload() {
@@ -118,12 +122,36 @@ func (m *TemplatesModel) SelectAfterReloadName() string { return m.selectAfterRe
 
 func (m *TemplatesModel) SelectByName(name string) {
 	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
 	for i, row := range m.rows {
-		if row.t != nil && row.t.Manifest != nil && strings.TrimSpace(row.t.Manifest.Name) == name {
+		if row.t == nil || row.t.Manifest == nil {
+			continue
+		}
+		if strings.TrimSpace(row.t.Manifest.Name) == name {
 			m.cursor = i
 			return
 		}
 	}
+	// Match install folder name (store key), not only manifest title.
+	for i, row := range m.rows {
+		if row.t == nil {
+			continue
+		}
+		if templateStoreDirName(row.t) == name {
+			m.cursor = i
+			return
+		}
+	}
+}
+
+// templateStoreDirName returns the on-disk template folder name (store key for local templates).
+func templateStoreDirName(t *template.Template) string {
+	if t == nil || strings.TrimSpace(t.Path) == "" {
+		return ""
+	}
+	return filepath.Base(t.Path)
 }
 
 func (m *TemplatesModel) startCreate() tea.Cmd {
@@ -280,7 +308,10 @@ func (m *TemplatesModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch m.deleteForm.State {
 			case huh.StateCompleted:
 				if m.deleteOK != nil && *m.deleteOK && m.deleteTarget != nil && m.deleteTarget.Manifest != nil {
-					n := strings.TrimSpace(m.deleteTarget.Manifest.Name)
+					n := templateStoreDirName(m.deleteTarget)
+					if n == "" {
+						n = strings.TrimSpace(m.deleteTarget.Manifest.Name)
+					}
 					if err := template.Remove(n); err != nil {
 						m.toast = err.Error()
 					} else {
@@ -413,7 +444,10 @@ func (m *TemplatesModel) ViewContent() string {
 	if m.width < 80 || m.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
+	return lipgloss.NewStyle().MaxWidth(MaxWidthTemplates).Render(m.viewContentInner())
+}
 
+func (m *TemplatesModel) viewContentInner() string {
 	switch m.mode {
 	case modeCreate:
 		if m.createForm != nil {
@@ -443,21 +477,25 @@ func (m *TemplatesModel) ViewContent() string {
 		return b.String()
 	}
 
-	leftW := 36
-	rightW := m.width - leftW - 4
+	layoutW := minInt(m.width, MaxWidthTemplates)
+	leftW := m.localColWidth()
+	rightW := layoutW - leftW - 4
 	if rightW < 28 {
 		rightW = 28
 	}
 
+	nameW := maxInt(8, leftW-m.metaColWidth()-2)
+	metaW := m.metaColWidth()
+
 	localLines := make([]string, 0, len(m.local)+1)
 	for _, t := range m.local {
-		localLines = append(localLines, rowLabel(t))
+		localLines = append(localLines, rowLineTwoCol(t, nameW, metaW))
 	}
 	localLines = append(localLines, "[+] Nuevo template")
 
 	rightLines := make([]string, 0, len(m.builtins))
 	for _, t := range m.builtins {
-		rightLines = append(rightLines, rowLabel(t))
+		rightLines = append(rightLines, rowLineTwoCol(t, nameW, metaW))
 	}
 
 	var b strings.Builder
@@ -467,12 +505,17 @@ func (m *TemplatesModel) ViewContent() string {
 
 	leftHead := fmt.Sprintf("Local (%d)", len(m.local))
 	rightHead := fmt.Sprintf("Built-in (%d)", len(m.builtins))
-		b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
+	sepLeft := minInt(leftW-2, 32)
+	if sepLeft < 8 {
+		sepLeft = 8
+	}
+	sepRight := minInt(rightW-2, 40)
+	b.WriteString(lipgloss.JoinHorizontal(lipgloss.Top,
 		lipgloss.NewStyle().Width(leftW).Render(
-			styleCompletedLabel.Render(leftHead)+"\n"+stylePending.Render(strings.Repeat("─", leftW-2))+"\n"+m.joinRowsLocal(localLines, leftW),
+			styleCompletedLabel.Render(leftHead)+"\n"+stylePending.Render(strings.Repeat("─", sepLeft))+"\n"+m.joinRowsLocal(localLines, leftW),
 		),
 		lipgloss.NewStyle().Width(rightW).Render(
-			styleCompletedLabel.Render(rightHead)+"\n"+stylePending.Render(strings.Repeat("─", minInt(rightW-2, 40)))+"\n"+m.joinRowsBuiltin(rightLines, rightW),
+			styleCompletedLabel.Render(rightHead)+"\n"+stylePending.Render(strings.Repeat("─", sepRight))+"\n"+m.joinRowsBuiltin(rightLines, rightW),
 		),
 	))
 
@@ -500,20 +543,44 @@ func (m *TemplatesModel) ViewContent() string {
 		b.WriteString("\n")
 	}
 
-	b.WriteString("\n")
-	b.WriteString(styleHelpBar.Render("enter detalle  n nuevo  e editar  d eliminar  esc volver"))
-	b.WriteString("\n")
-	return b.String()
+	main := b.String()
+	help := "enter detalle  n nuevo  e editar  d eliminar  esc volver"
+	return m.padHelpBarToBottom(main, help)
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
+func (m *TemplatesModel) localColWidth() int {
+	maxLen := 20
+	for _, t := range m.local {
+		if t == nil || t.Manifest == nil {
+			continue
+		}
+		n := len(strings.TrimSpace(t.Manifest.Name))
+		if n > maxLen {
+			maxLen = n
+		}
 	}
-	return b
+	if len("[+] Nuevo template") > maxLen {
+		maxLen = len("[+] Nuevo template")
+	}
+	return minInt(maxLen+4, 35)
 }
 
-func rowLabel(t *template.Template) string {
+func (m *TemplatesModel) metaColWidth() int {
+	return 24
+}
+
+func (m *TemplatesModel) padHelpBarToBottom(main string, help string) string {
+	helpBar := styleHelpBar.Render(help) + "\n"
+	ch := lipgloss.Height(main)
+	hh := lipgloss.Height(helpBar)
+	pad := m.height - ch - hh - 1
+	if pad < 0 {
+		pad = 0
+	}
+	return main + strings.Repeat("\n", pad) + helpBar
+}
+
+func rowLineTwoCol(t *template.Template, nameW, metaW int) string {
 	if t == nil || t.Manifest == nil {
 		return ""
 	}
@@ -521,17 +588,26 @@ func rowLabel(t *template.Template) string {
 	lang := strings.TrimSpace(t.Manifest.Language)
 	arch := strings.TrimSpace(t.Manifest.Architecture)
 	meta := strings.TrimSpace(lang + " · " + arch)
-	return fmt.Sprintf("%-22s  %s", truncateStr(name, 22), truncateStr(meta, 18))
+	nameSt := lipgloss.NewStyle().MaxWidth(nameW).Inline(true).Render(name)
+	metaSt := lipgloss.NewStyle().MaxWidth(metaW).Inline(true).Foreground(colorMuted).Render(meta)
+	return lipgloss.JoinHorizontal(lipgloss.Top,
+		lipgloss.NewStyle().Width(nameW).Render(nameSt),
+		lipgloss.NewStyle().Width(metaW).Render(metaSt),
+	)
 }
 
-func truncateStr(s string, max int) string {
-	if len(s) <= max {
-		return s
+func maxInt(a, b int) int {
+	if a > b {
+		return a
 	}
-	if max <= 3 {
-		return s[:max]
+	return b
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
 	}
-	return s[:max-3] + "..."
+	return b
 }
 
 func (m *TemplatesModel) cursorLeftLine() int {

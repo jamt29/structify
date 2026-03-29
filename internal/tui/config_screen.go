@@ -2,11 +2,14 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/jamt29/structify/internal/buildinfo"
 	"github.com/jamt29/structify/internal/config"
 	"github.com/jamt29/structify/internal/template"
 )
@@ -63,6 +66,17 @@ func (m *ConfigModel) View() string {
 	return m.ViewContent()
 }
 
+func expandHome(p string) string {
+	h, err := os.UserHomeDir()
+	if err != nil || h == "" {
+		return p
+	}
+	if strings.HasPrefix(p, h) {
+		return "~" + strings.TrimPrefix(p, h)
+	}
+	return p
+}
+
 func (m *ConfigModel) ViewContent() string {
 	if m.width < 80 || m.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
@@ -70,38 +84,62 @@ func (m *ConfigModel) ViewContent() string {
 
 	configFile := m.cfg.ConfigFile
 	if strings.TrimSpace(configFile) == "" {
-		// Best-effort fallback when file doesn't exist.
-		configFile = m.cfg.ConfigDir + "/config.yaml"
+		configFile = filepath.Join(m.cfg.ConfigDir, "config.yaml")
+	}
+	configFile = expandHome(configFile)
+
+	templatesDir := expandHome(m.cfg.TemplatesDir)
+	if strings.TrimSpace(templatesDir) == "" {
+		templatesDir = "~/.structify/templates/"
 	}
 
-	localDir := m.cfg.TemplatesDir
-	if strings.TrimSpace(localDir) == "" {
-		localDir = "~/.structify/templates/"
-	}
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBorder).
+		Padding(0, 1).
+		Width(min(m.width-6, MaxWidthConfig))
 
-	version := "v0.1.4"
+	titleStyle := lipgloss.NewStyle().Foreground(colorPrimary).Bold(true)
 
-	var box strings.Builder
-	if m.err != nil {
-		box.WriteString(styleErrorText(m.err.Error()))
-		box.WriteString("\n\n")
-	}
-	box.WriteString(fmt.Sprintf("Config file   %s\n", configFile))
-	box.WriteString(fmt.Sprintf("Templates     %s  (%d instalados)\n", localDir, m.localCount))
-	box.WriteString(fmt.Sprintf("Log level     %s\n", m.cfg.LogLevel))
-	box.WriteString(fmt.Sprintf("Version       %s\n", version))
-	box.WriteString("\nPara editar: abre el archivo de config con tu editor.")
-	box.WriteString("\n\nesc volver")
-
-	content := strings.Join([]string{
-		styleHeader.Render("structify") + "  " + styleCompletedLabel.Render("·  Configuración"),
+	general := strings.Join([]string{
+		titleStyle.Render("Información general"),
 		"",
-		styleActiveBox.Render(box.String()),
+		fmt.Sprintf("  %-16s %s", "Versión", buildinfo.Version),
+		fmt.Sprintf("  %-16s %s", "Config file", configFile),
+		fmt.Sprintf("  %-16s %s", "Templates dir", templatesDir),
+		fmt.Sprintf("  %-16s %d instalados", "Templates local", m.localCount),
 	}, "\n")
-	return content
+
+	prefs := strings.Join([]string{
+		titleStyle.Render("Preferencias"),
+		"",
+		fmt.Sprintf("  %-16s %s", "Log level", m.cfg.LogLevel),
+		fmt.Sprintf("  %-16s %t", "Non-interactive", m.cfg.NonInteractive),
+	}, "\n")
+
+	var top strings.Builder
+	if m.err != nil {
+		top.WriteString(styleErrorText(m.err.Error()))
+		top.WriteString("\n\n")
+	}
+
+	body := lipgloss.JoinVertical(lipgloss.Left,
+		boxStyle.Render(general),
+		"",
+		boxStyle.Render(prefs),
+		"",
+		stylePending.Render("Para editar: "+configFile),
+		"",
+		styleHelpBar.Render("esc volver"),
+	)
+
+	top.WriteString(styleHeader.Render("structify") + "  " + styleCompletedLabel.Render("·  Configuración"))
+	top.WriteString("\n\n")
+	top.WriteString(body)
+
+	return lipgloss.NewStyle().MaxWidth(MaxWidthConfig).Render(top.String())
 }
 
 func styleErrorText(msg string) string {
 	return lipgloss.NewStyle().Foreground(colorError).Bold(true).Render("✗ " + msg)
 }
-

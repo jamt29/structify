@@ -31,14 +31,39 @@ func (i templateItem) Description() string {
 	lang := strings.TrimSpace(m.Language)
 	desc := strings.TrimSpace(m.Description)
 
-	meta := strings.TrimSpace(strings.Join([]string{arch, lang}, " · "))
-	if meta == "" {
-		return desc
+	badge := languageBadge(lang)
+	metaLine := arch
+	if metaLine == "" {
+		metaLine = desc
+	} else if desc != "" {
+		metaLine = arch + " · " + desc
 	}
-	if desc == "" {
-		return meta
+	if badge == "" {
+		return lipgloss.NewStyle().Foreground(colorMuted).Render(metaLine)
 	}
-	return meta + "\n" + desc
+	if metaLine == "" {
+		return badge
+	}
+	return lipgloss.JoinHorizontal(lipgloss.Top, badge, lipgloss.NewStyle().Foreground(colorMuted).Render(" · "+metaLine))
+}
+
+func languageBadge(lang string) string {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	if l == "" {
+		return ""
+	}
+	switch l {
+	case "go":
+		return lipgloss.NewStyle().Foreground(colorPrimary).Render(l)
+	case "typescript":
+		return lipgloss.NewStyle().Foreground(colorActive).Render(l)
+	case "rust":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#E06C75")).Render(l)
+	case "python":
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#E5C07B")).Render(l)
+	default:
+		return lipgloss.NewStyle().Foreground(colorMuted).Render(l)
+	}
 }
 
 func (i templateItem) FilterValue() string {

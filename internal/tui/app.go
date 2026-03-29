@@ -130,14 +130,28 @@ func newApp(templates []*tmpl.Template, eng *engine.Engine) (*App, error) {
 		return nil, fmt.Errorf("no templates found")
 	}
 
-	sel := list.New(items, list.NewDefaultDelegate(), 80, 20)
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = delegate.Styles.SelectedTitle.
+		Foreground(colorText).
+		BorderLeft(true).
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(colorPrimary).
+		PaddingLeft(0)
+	delegate.Styles.SelectedDesc = delegate.Styles.SelectedDesc.
+		Foreground(colorMuted).
+		BorderLeft(true).
+		BorderStyle(lipgloss.ThickBorder()).
+		BorderForeground(colorPrimary)
+
+	sel := list.New(items, delegate, 80, 20)
 	sel.SetFilteringEnabled(true)
 	sel.SetShowStatusBar(false)
 	sel.SetShowHelp(false)
-	sel.Title = "Selecciona un template"
+	sel.Title = fmt.Sprintf("Selecciona un template (%d)", len(items))
 
 	spin := spinner.New()
-	spin.Spinner = spinner.Line
+	spin.Spinner = spinner.Dot
+	spin.Style = lipgloss.NewStyle().Foreground(colorActive)
 
 	return &App{
 		state:       stateSelectTemplate,
@@ -427,29 +441,44 @@ func (a *App) updateProgress(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (a *App) View() string {
 	content := a.ViewContent()
-	// RunApp() renders App directly (no RootModel). Mirror RootModel.View layout for each state.
-	switch a.state {
-	case stateProgress:
-		return centerContentHorizontal(a.width, content)
-	case stateSelectTemplate, stateInputs, stateConfirm, stateDone, stateError:
-		return centerContent(a.width, a.height, content)
-	default:
-		return centerContentHorizontal(a.width, content)
-	}
+	return ApplyScreenCentering(AppCenteringMode(a.state), a.width, a.height, content)
 }
 
 // ViewContent returns the raw (non-centered) content of this screen.
-// RootModel and RunApp() apply centering in View() / RootModel.View respectively.
+// RootModel and RunApp apply centering via ApplyScreenCentering in View / RootModel.View.
 func (a *App) ViewContent() string {
 	if a.width < 80 || a.height < 24 {
 		return stylePending.Render("Terminal too small. Minimum 80x24.")
 	}
 
-	return strings.Join([]string{
+	content := strings.Join([]string{
 		a.renderHeader(),
 		a.renderBody(),
 		styleHelpBar.Render(" " + a.helpText()),
 	}, "\n")
+	return lipgloss.NewStyle().MaxWidth(a.viewMaxWidthForState()).Render(content)
+}
+
+func (a *App) viewMaxWidthForState() int {
+	switch a.state {
+	case stateSelectTemplate:
+		return MaxWidthSelector
+	case stateInputs:
+		return MaxWidthInputs
+	case stateConfirm:
+		return MaxWidthConfirm
+	case stateProgress:
+		return MaxWidthProgress
+	case stateDone, stateError:
+		return MaxWidthDone
+	default:
+		return MaxWidthInputs
+	}
+}
+
+// layoutWidthCaps terminal width for split/panels to match MaxWidth(inputs) block.
+func (a *App) layoutWidthForInputs() int {
+	return min(a.width, MaxWidthInputs)
 }
 
 func (a *App) renderHeader() string {
@@ -491,15 +520,16 @@ func (a *App) renderBody() string {
 
 func (a *App) renderInputsSplit() string {
 	leftPanel := a.renderInputs()
-	if a.width < 80 {
+	lw := a.layoutWidthForInputs()
+	if lw < 80 {
 		return leftPanel
 	}
 
-	leftWidth := int(float64(a.width) * 0.55)
-	if a.width >= 120 {
-		leftWidth = a.width / 2
+	leftWidth := int(float64(lw) * 0.55)
+	if lw >= 120 {
+		leftWidth = lw / 2
 	}
-	rightWidth := a.width - leftWidth - 1
+	rightWidth := lw - leftWidth - 1
 	if rightWidth < 20 {
 		return leftPanel
 	}
@@ -607,11 +637,12 @@ func (a *App) renderConfirm() string {
 		b.WriteString(styleCompletedLabel.Render(padRight(kv.key, 14)) + " " + styleCompletedValue.Render(kv.value) + "\n")
 	}
 
-	box := styleActiveBox.Width(min(a.width-8, 72)).Render(b.String())
+	boxW := min(a.width-8, MaxWidthConfirm)
+	box := styleActiveBox.Width(boxW).Render(b.String())
 	treeBlock := stylePending.Render("(calculando...)")
 	if req, err := a.buildPartialRequest(); err == nil && req != nil {
 		if tree, err := a.engine.PreviewFiles(req); err == nil && tree != nil {
-			treeBlock = RenderTree(tree, min(a.width-8, 72), 10)
+			treeBlock = RenderTree(tree, boxW, 10)
 		}
 	}
 	return strings.Join([]string{
@@ -633,7 +664,7 @@ func (a *App) renderProgress() string {
 		case "done":
 			b.WriteString(styleCheckmark.Render("✓ ") + styleCompletedValue.Render(line.command) + "\n")
 		case "skipped":
-			b.WriteString(stylePending.Render("─ "+line.command+" (skipped)") + "\n")
+			b.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render("─ "+line.command) + "\n")
 		case "error":
 			b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗ "+line.command) + "\n")
 		}
@@ -655,7 +686,7 @@ func (a *App) renderDone() string {
 				cmd = strings.TrimSpace(s.Name)
 			}
 			if s.Skipped {
-				b.WriteString(stylePending.Render("─  "+cmd+"  (skipped)") + "\n")
+				b.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render("─  "+cmd) + "\n")
 			} else if s.Error != nil {
 				b.WriteString(lipgloss.NewStyle().Foreground(colorError).Render("✗  "+cmd) + "\n")
 			} else {
@@ -666,12 +697,11 @@ func (a *App) renderDone() string {
 	b.WriteString("\n")
 	b.WriteString(styleCompletedValue.Render("Próximos pasos") + "\n")
 	b.WriteString(stylePending.Render(strings.Repeat("─", 14)) + "\n")
-	var block strings.Builder
 	for _, line := range nextSteps(a.language(), ctxStringMap(a.answers, "project_name")) {
-		block.WriteString(line + "\n")
+		b.WriteString(styleCompletedValue.Render(line) + "\n")
 	}
-	b.WriteString(lipgloss.NewStyle().BorderLeft(true).BorderForeground(colorActive).PaddingLeft(1).Render(strings.TrimSpace(block.String())))
-	return b.String()
+	inner := strings.TrimRight(b.String(), "\n")
+	return lipgloss.NewStyle().MaxWidth(MaxWidthDone).Align(lipgloss.Left).Padding(0, 2).Render(inner)
 }
 
 func (a *App) renderError() string {
@@ -1093,7 +1123,8 @@ func (a *App) resizeComponents() {
 	if h < 5 {
 		h = 5
 	}
-	a.selector.SetSize(a.width-2, h)
+	selW := min(a.width-2, MaxWidthSelector)
+	a.selector.SetSize(selW, h)
 	for i := range a.inputs {
 		if a.inputs[i].kind == "enum" {
 			a.inputs[i].enum.SetSize(a.width-8, min(max(4, h-6), 10))
@@ -1104,14 +1135,15 @@ func (a *App) resizeComponents() {
 // inputsFormWidth coincide con el ancho del panel izquierdo en renderInputsSplit
 // para que Huh no crea que ocupa todo el terminal cuando hay vista partida.
 func (a *App) inputsFormWidth() int {
-	if a.width < 80 {
+	lw := a.layoutWidthForInputs()
+	if lw < 80 {
 		return a.width
 	}
-	leftWidth := int(float64(a.width) * 0.55)
-	if a.width >= 120 {
-		leftWidth = a.width / 2
+	leftWidth := int(float64(lw) * 0.55)
+	if lw >= 120 {
+		leftWidth = lw / 2
 	}
-	rightWidth := a.width - leftWidth - 1
+	rightWidth := lw - leftWidth - 1
 	if rightWidth < 20 {
 		return a.width
 	}

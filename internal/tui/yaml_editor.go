@@ -197,7 +197,12 @@ func (m *YAMLEditorModel) trySave() {
 		return
 	}
 	m.original = text
-	m.reloadName = strings.TrimSpace(man.Name)
+	// Store selection uses on-disk folder name, not manifest title (may differ).
+	if m.tpl != nil && strings.TrimSpace(m.tpl.Path) != "" {
+		m.reloadName = filepath.Base(m.tpl.Path)
+	} else {
+		m.reloadName = strings.TrimSpace(man.Name)
+	}
 	m.pendingReload = true
 	m.done = true
 }
@@ -209,7 +214,8 @@ func (m *YAMLEditorModel) View() string {
 // ViewContent dibuja el panel del editor (para RootModel / centrado).
 func (m *YAMLEditorModel) ViewContent() string {
 	if m.saveErr != "" && m.original == "" {
-		return styleHeader.Render("structify") + "\n\n" + stylePending.Render(m.saveErr) + "\n\n" + styleHelpBar.Render("esc volver")
+		s := styleHeader.Render("structify") + "\n\n" + stylePending.Render(m.saveErr) + "\n\n" + styleHelpBar.Render("esc volver")
+		return lipgloss.NewStyle().MaxWidth(MaxWidthEditor).Render(s)
 	}
 
 	title := "scaffold.yaml"
@@ -224,7 +230,7 @@ func (m *YAMLEditorModel) ViewContent() string {
 
 	if m.confirmForm != nil {
 		b.WriteString(m.confirmForm.View())
-		return b.String()
+		return lipgloss.NewStyle().MaxWidth(MaxWidthEditor).Render(b.String())
 	}
 
 	box := lipgloss.NewStyle().
@@ -254,12 +260,5 @@ func (m *YAMLEditorModel) ViewContent() string {
 	b.WriteString("\n")
 	b.WriteString(styleHelpBar.Render("ctrl+s guardar  esc salir  (validación al guardar)"))
 	b.WriteString("\n")
-	return b.String()
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
+	return lipgloss.NewStyle().MaxWidth(MaxWidthEditor).Render(b.String())
 }

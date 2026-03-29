@@ -2,6 +2,20 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
+// Max widths for TUI content (avoid stretching on very wide terminals).
+const (
+	MaxWidthMenu      = 72
+	MaxWidthSelector  = 60
+	MaxWidthInputs    = 110
+	MaxWidthConfirm   = 80
+	MaxWidthProgress  = 70
+	MaxWidthDone      = 70
+	MaxWidthTemplates = 100
+	MaxWidthEditor    = 90
+	MaxWidthGitHub    = 70
+	MaxWidthConfig    = 78
+)
+
 var (
 	colorPrimary = lipgloss.Color("#C678DD")
 	colorSuccess = lipgloss.Color("#98C379")
@@ -52,6 +66,7 @@ var (
 				Foreground(colorText).
 				Background(lipgloss.Color("#2d2f3f")).
 				BorderLeft(true).
+				BorderStyle(lipgloss.ThickBorder()).
 				BorderForeground(colorPrimary).
 				Padding(0, 1)
 

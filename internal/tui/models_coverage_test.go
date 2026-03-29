@@ -29,9 +29,9 @@ func TestTemplateItem_Methods(t *testing.T) {
 	if got := ti.Title(); got != "My Template" {
 		t.Fatalf("Title: got %q", got)
 	}
-	wantDesc := "clean · go\nDesc"
-	if got := ti.Description(); got != wantDesc {
-		t.Fatalf("Description: got %q want %q", got, wantDesc)
+	got := ti.Description()
+	if !strings.Contains(got, "clean") || !strings.Contains(got, "Desc") {
+		t.Fatalf("Description: expected clean + Desc in rendered line; got %q", got)
 	}
 
 	gotFilter := ti.FilterValue()
